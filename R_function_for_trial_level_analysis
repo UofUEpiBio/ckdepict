@@ -1,0 +1,1542 @@
+#################################################
+#################################################
+#################################################
+# This script can be used to fit trial-level
+# meta-regression relating a variety of endpoints
+# using different modeling techniques. Treatment
+# effects of one kind can be regressed on one
+# or two treatment effects on one or two 
+# additional endpoints. Fixed or random
+# surrogate-effects models can be used, and the
+# stan script linked in the script will
+# handle three-arm trials, where necessary.
+# A few functions are created to handle 
+# loading and subsetting trial data as well
+# as fitting the appropriate stan code. 
+#################################################
+#################################################
+#################################################
+
+###################################################################
+# Mandatory packages (and one function to load). 
+# The following packages are necessary to fit models in later 
+# sections. 
+library(rstan)
+library(coda)
+library(rlang)
+
+stan2coda <- function(fit) {
+  mcmc.list(lapply(1:ncol(fit), function(x) mcmc(as.array(fit)[,x,])))
+}
+
+###################################################################
+# Optional: Implement the following line of code to use
+# existing computer cores to parallelize rstan mcmc chains. 
+library(parallel)
+options(mc.cores=parallel::detectCores())
+
+###################################################################
+###################################################################
+# Function: This function will load in and subset the data 
+# according to the trials of interest for a particular analysis
+# Inputs to the function will thus include subset parameters.
+# Once data is subsetted according to trials included/excluded,
+# the function will create a list of data including number
+# of studies, estimated treatment effects to be used in a given
+# meta-regression, and the variance-covariance terms between
+# estimated treatment effects. The list object containing
+# these elements is necessary for stan model fitting. The function
+# will thus also take parameters dictating the treatment effects
+# of interest. Finally, function parameters can be specified to 
+# indicate the type of model used (fixed vs. random). Note that
+# the function will place trials with multiple contrasts
+# on top of the data that is ultimately used for the stan model
+# fitting, and the user of the function can specify which trials
+# have more than one contrast. 
+
+# Inputs:
+# data_location - filepath for the trial-level data being loaded into the function for
+# model fitting. 
+# NOTE: Needs specification, no default.
+
+# data_file - filename of trial-level data. 
+# NOTE: Needs specification, no default.
+
+# output_location - filepath for the three datasets produced by the function. These
+# dataframes in .csv format will be saved to this location.
+# NOTE: Needs specification, no default.
+
+# model_number - When running multiple models, the output will be saved and indexed
+# by this number. For example, posteriors are saved as "PS_data_1.csv" if 
+# model_number = 1.
+# NOTE: Default = 1. 
+
+# pooled - refers to the "pooled" variable in the trial level data for subsetting by excluding
+# the trials corresponding to this pooled number (enter as string).
+# NOTE: Default = "2".
+
+# eventnumber - refers the "eventnumber" variable in the trial level data for subsetting
+# by including trials corresponding to this number (enter as string).
+# NOTE: Default = "3". 
+
+# outcome_SE_cutoff - refers to a numerical value of standard error above which trials with 
+# SEs on the outcome effect in the analysis will be excluded. 
+# NOTE: Default = 1000000 (no subsetting).
+
+# exclude_interventions - This should be a vector of abbreviations for interventions
+# in the trial-level data that are to be excluded from the meta-regression. These
+# must follow interventions from "intervention_abrev".
+# NOTE: Default is no exclusions. 
+
+# exclude_trial_names - Vector of trial names to be excluded from the analysis.
+# NOTE: Default is no exclusions. 
+
+# outcome - Specify "clinical-effect" (log-HR for time-to-ESRD/death) OR
+# "chronic-slope" (mean difference across treatment groups in eGFR chronic slope) OR
+# "total-slope" (mean difference across treatment groups in eGFR total slope) OR 
+# "ACR" (ACR change geometric mean ratio comparing treatment groups). 
+# NOTE: Needs specification, no default.
+
+# independent_effects - Outcome effect will be regressed, in the meta-regression, 
+# on one or two of the following: "chronic-slope", "total-slope", and/or "ACR"
+# NOTE: Needs specification, no default.
+
+# model_type - Specify either "fixed" or "random" or fixed or random surrogate effects
+# distributional assumption. 
+# NOTE: Needs specification, no default.
+
+# num.iter - Number of mcmc iterations for meta-regression model fitting. 
+# NOTE: Needs specification, no default.
+
+# follow_up_ACR - Indicates ACR change measurement duration. Should be 6 or 12.
+# NOTE: Default is 6 months. 
+
+# follow_up_GFR - Indicates follow-up for eGFR total slope. Should be 1,2,3, or 4. 
+# NOTE: Default is 3 years. 
+
+# multi_arm_trials - Specify names of trials as they are presented in column
+# under variable name "allrxname" which have more than one active treatment
+# arm relative to control. If they have two contrasts relative to control,
+# these trials will have non-zero correlation between treatment effects 
+# related to different arms. The trials with multiple contrasts need
+# to have both contrasts spelled out in this column as it appears in the
+# the column. 
+# Default is no multi-arm trials. 
+
+# multi_arm_corrs - These are the fixed correlations between effect contrasts
+# across arms in trials with more than two arms. These are computed
+# external to the data loaded into the function. 
+# Default is no multi-arm trials. 
+
+# sur_var_prior - For the random-effects models, a prior needs to be specified
+# for the true-surrogate effects variance for whichever true surrogate effect
+# is itself given a marginal distribution. Enter the distribution in stan language
+# as well as the parameter input values. For example, "inverse_gamma(0.001,0.001)".
+# NOTE: Default is inverse_gamma(0.001,0.001)
+
+# error_var_prior - For the random or fixed-effects model, the error variance
+# for the regression of either one true effect on the other, or for the
+# clinical effect on both surrogates in the joint model. Enter the distribution in stan language
+# as well as the parameter input values. For example, "normal(0,1)".
+# NOTE: Default is inverse_gamma(0.001,0.001)
+
+# error_var_prior_2 - For the joint model with two independent surrogate effects
+# when the random effects model is used, we need a prior for the error variance
+# in the regression of surrogate 1 on surrogate two. For example, "uniform(0,1)".
+# NOTE: Default is inverse_gamma(0.001,0.001)
+
+# beta_prior - For the one-surrogate model, specify a prior for the meta-regression
+# slope using this input. For the joint model with two surrogates, specify
+# the prior for the meta-regession of the surrogate 1 on surrogate 2 using this term.
+# NOTE: Default is normal(0,5^2)
+
+# beta_prior_1 - This input is only necessary for the joint model with two surrogates.
+# When using the joint model, beta_prior_1 is the prior for the meta-regression
+# of clinical on surrogate effects for the slope associated with surrogate 1.
+# NOTE: Default is normal(0,5^2)
+
+# beta_prior_2 - This input is only necessary for the joint model with two surrogates.
+# When using the joint model, beta_prior_2 is the prior for the meta-regression
+# of clinical on surrogate effects for the slope associated with surrogate 2.
+# NOTE: Default is normal(0,5^2)
+
+# subset_condition_n - for n=1,2,3. Enter a condition statement for subsetting the 
+# trial data to include only a subset of trials for the model-fitting. The
+# statement should be entered in a string but using r code. For example, 
+# "< 1000" or "%in% c('name1','name2')" or "== 'disease_name'". Up-to three
+# condition statements can be provided.
+# Default is no subsetting condition. 
+
+# subset_condition_colnamen - for n=1,2,3. Provide the variable name being used
+# for the corresponding condition number. Enter this variable name in quotes.
+# For example, "zzupro_median".
+# Default is no subsetting condition. 
+
+# subset_description_n - for n=1,2,3. Give plain language for subset criteria. This
+# will be placed into the model info summary table to describe subgrouping
+# criteria 1,2, and 3 if necessary. 
+# Default is no subsetting condition. 
+
+# fit_date - Enter the date of model fitting in any desired format as a string. 
+# The date will be added to the filename for each of the three files output
+# from the function. If no date is specified, the default date will be
+# obtained from the computer in used and will be added to file names. 
+
+# num_chains - The number of independent MCMC chains used for the Bayesian model fitting.
+# Given an integer input of at least 1. The default will be 3. 
+
+# outcome_name_est - Variable name of the treatment effect used as the outcome in the regression.
+
+# outcome_name_se - Variable standard error of the treatment effect used as the outcome in the regression.
+
+# indep_var_name_est - Variable name of the treatment effect used as the independent variable in the regression.
+# If there is one independent variable (univariable comparison), then use only this term.
+
+# indep_var_name_se - Variable name of the standard error of the treatment effect used as the independent 
+# variable in the regression. If there is one independent variable (univariable comparison), then use only this term.
+
+# indep_var_name_2_est - Variable name of the second treatment effect used as the independent variable in the regression
+# when using two surrogate effects in a multivariable meta-regression. 
+
+# indep_var_name_2_se - Variable name of the standard error of the second treatment effect used as the independent 
+# variable in the regression when using two surrogate effects in a multivariable meta-regression. 
+
+# cln_surr_corr_name - Variable name for the within-study correlation between the sampling errors of the outcome effect and the
+# first (or only) independent variable effect. 
+
+# cln_surr_corr_name_2 - Variable name for the within-study correlation between the sampling errors of the outcome effect and the
+# second independent variable effect, if applicable. 
+
+# surr_surr_corr_name - Variable name for the within-study correlation between the sampling errors of the two independent
+# variable effects, if applicable.
+
+trial_MR = function(data_location,data_file,output_location,model_number=1,
+                    pooled="2",eventnumber="3",outcome_SE_cutoff=100000,exclude_interventions=c(""),exclude_trial_names=c(""),
+                    outcome,independent_effects,model_type,num.iter,indep_var_name_est,indep_var_name_se,outcome_name_est,outcome_name_se,
+                    cln_surr_corr_name,indep_var_name_2_est=NA,indep_var_name_2_se=NA,surr_surr_corr_name=NA,cln_surr_corr_name_2=NA,
+                    sur_var_prior="inv_gamma(0.001,0.001)", error_var_prior="inv_gamma(0.001,0.001)",error_var_prior_2="inv_gamma(0.001,0.001)",
+                    beta_prior="normal(0,5)",beta_prior_1="normal(0,5)",beta_prior_2="normal(0,5)",
+                    follow_up_ACR=6, follow_up_GFR=3,
+                    multi_arm_trials=NA,multi_arm_corrs=NA,
+                    subset_condition_1=NA,subset_condition_colname1=NA,
+                    subset_condition_2=NA,subset_condition_colname2=NA,
+                    subset_condition_3=NA,subset_condition_colname3=NA,
+                    subset_description_1=NA,subset_description_2=NA,
+                    subset_description_3=NA,fit_date=as.character(Sys.Date()),num_chains=3) { #most of the parameters are assigned the default values upon establishing the function
+  
+  if(is.na(model_number)) { #all missing() functions are replaced by is.na() in case of NA values
+    model_number=1
+  } else {
+    model_number=model_number
+  }
+  if(is.na(pooled)) {
+    pooled="2"
+  } else {
+    pooled=pooled
+  }
+  if(is.na(eventnumber)) {
+    eventnumber="3"
+  } else {
+    eventnumber=eventnumber
+  }
+  if(is.na(outcome_SE_cutoff)) {
+    outcome_SE_cutoff=100000
+  } else {
+    outcome_SE_cutoff=outcome_SE_cutoff
+  }
+  if(is.na(exclude_interventions)) {
+    exclude_interventions=c("")
+  } else {
+    exclude_interventions=exclude_interventions
+  }
+  if(is.na(exclude_trial_names)) {
+    exclude_trial_names=c("")
+  } else {
+    exclude_trial_names=exclude_trial_names
+  }
+  if(is.na(sur_var_prior)) {
+    sur_var_prior="inv_gamma(0.001,0.001)"
+  } else {
+    sur_var_prior=sur_var_prior
+  }
+  if(is.na(error_var_prior)) {
+    error_var_prior="inv_gamma(0.001,0.001)"
+  } else {
+    error_var_prior=error_var_prior
+  }
+  if(is.na(error_var_prior_2)) {
+    error_var_prior_2="inv_gamma(0.001,0.001)"
+  } else {
+    error_var_prior_2=error_var_prior_2
+  }
+  if(is.na(beta_prior)) {
+    beta_prior="normal(0,5)"
+  } else {
+    beta_prior=beta_prior
+  }
+  if(is.na(beta_prior_1)) {
+    beta_prior_1="normal(0,5)"
+  } else {
+    beta_prior_1=beta_prior_1
+  }
+  if(is.na(beta_prior_2)) {
+    beta_prior_2="normal(0,5)"
+  } else {
+    beta_prior_2=beta_prior_2
+  }
+  if(is.na(follow_up_ACR)) {
+    follow_up_ACR=6
+  } else {
+    follow_up_ACR=follow_up_ACR
+  }
+  if(is.na(follow_up_GFR)) {
+    follow_up_GFR=3
+  } else {
+    follow_up_GFR=follow_up_GFR
+  }
+  if(is.na(fit_date)) {
+    fit_date=as.character(Sys.Date())
+  } else {
+    fit_date=fit_date
+  }
+  if(is.na(num_chains)) {
+    num_chains=3
+  } else {
+    num_chains=num_chains
+  }
+  
+  myData=read.csv(file.path(data_location, data_file))
+  
+  myData=myData[(myData$eventnumber %in% eventnumber)&
+                  (!myData$pooled %in% pooled)&
+                  (!myData$intervention_abrev %in% exclude_interventions),]
+  
+  myData=myData[(!myData$allrxname %in% exclude_trial_names),]
+  
+  if(is.na(subset_condition_1)) {
+    myData=myData
+  } else {
+    name.loc1 = names(myData) %in% subset_condition_colname1
+    exp1 = parse_expr(paste("myData[,name.loc1]",subset_condition_1))
+    myData=myData[eval(exp1),]
+  }
+  if(is.na(subset_condition_2)) {
+    myData=myData
+  } else {
+    name.loc2 = names(myData) %in% subset_condition_colname2
+    exp2 = parse_expr(paste("myData[,name.loc2]",subset_condition_2))
+    myData=myData[eval(exp2),]
+  }
+  if(is.na(subset_condition_3)) {
+    myData=myData
+  } else {
+    name.loc3 = names(myData) %in% subset_condition_colname3
+    exp3 = parse_expr(paste("myData[,name.loc3]",subset_condition_3))
+    myData=myData[eval(exp3),]
+  }
+  
+  if(length(which(myData$allrxname %in% multi_arm_trials)) == 0) {
+    myData=myData
+  } else {
+    # Multi-arm trials go on top of the data. 
+    r1 = as.data.frame(t(rep(multi_arm_corrs,each = 2)))
+    colnames(r1)=multi_arm_trials
+    r1=r1[ , rev(names(r1))]
+    d1=myData[myData$allrxname %in% multi_arm_trials,]
+    d2=myData[!(myData$allrxname %in% multi_arm_trials), ]
+    myData=rbind(d1,d2)
+  }
+  
+  if (length(independent_effects) == 1) {
+    
+    myData=myData[!is.na(myData[,colnames(myData) == outcome_name_se]),]
+    
+    myData=myData[(myData[,colnames(myData) == outcome_name_se] < outcome_SE_cutoff),]
+    
+    if (length(which(is.na(myData[,colnames(myData) == outcome_name_est])))>0) {
+      myData = myData[-which(is.na(myData[,colnames(myData) == outcome_name_est])),]
+    }
+    if (length(which(is.na(myData[,colnames(myData) == indep_var_name_est])))>0) {
+      myData = myData[-which(is.na(myData[,colnames(myData) == indep_var_name_est])),]
+    }
+    
+    sur1Est=myData[,colnames(myData) == indep_var_name_est]
+    sur1SE=myData[,colnames(myData) == indep_var_name_se]
+    R1Clin=myData[,colnames(myData) == cln_surr_corr_name]
+    
+    ClnEst=myData[,colnames(myData) == outcome_name_est]
+    ClnSE=myData[,colnames(myData) == outcome_name_se]
+    R1Clin[is.na(R1Clin)]=mean(R1Clin,na.rm=TRUE)
+    nStudies=length(myData$study)
+    
+    data=list(
+      
+      nStudies=nStudies,
+      sur1Est=sur1Est,
+      sur1SE=sur1SE,
+      R1Clin=R1Clin,
+      ClnEst=ClnEst,
+      ClnSE=ClnSE
+      
+    )
+    
+    if(length(which(myData$allrxname %in% multi_arm_trials))>1 & substr(myData$allrxname[2],1,2) == substr(myData$allrxname[1],1,2)){
+      data$nMultiArm=length(which(myData$allrxname %in% multi_arm_trials))/2
+      data$multi_arm_corrs=as.vector(unique(t(as.vector(r1[1,intersect(myData$allrxname,multi_arm_trials)]))))
+    }
+    if(length(data$multi_arm_corrs)==1 & length(which(myData$allrxname %in% multi_arm_trials))>1){
+      data$multi_arm_corrs=as.array(data$multi_arm_corrs)
+    }
+  }
+  
+  if (length(independent_effects) == 2) {
+    
+    myData=myData[(myData[,colnames(myData) == outcome_name_se] < outcome_SE_cutoff),]
+    
+    if (length(which(is.na(myData[,colnames(myData) == outcome_name_est])))>0) {
+      myData = myData[-which(is.na(myData[,colnames(myData) == outcome_name_est])),]
+    }
+    if (length(which(is.na(myData[,colnames(myData) == indep_var_name_est])))>0) {
+      myData = myData[-which(is.na(myData[,colnames(myData) == indep_var_name_est])),]
+    }
+    if (length(which(is.na(myData[,colnames(myData) == indep_var_name_2_est])))>0) {
+      myData = myData[-which(is.na(myData[,colnames(myData) == indep_var_name_2_est])),]
+    }
+    
+    sur1Est=myData[,colnames(myData) == indep_var_name_est]
+    sur1SE=myData[,colnames(myData) == indep_var_name_se]
+    sur2Est=myData[,colnames(myData) == indep_var_name_2_est]
+    sur2SE=myData[,colnames(myData) == indep_var_name_2_se]
+    ClnEst=myData[,colnames(myData) == outcome_name_est]
+    ClnSE=myData[,colnames(myData) == outcome_name_se]
+    
+    R1Clin=myData[,colnames(myData) == cln_surr_corr_name]
+    R2Clin=myData[,colnames(myData) == cln_surr_corr_name_2]
+    R1R2=myData[,colnames(myData) == surr_surr_corr_name]
+    
+    R1R2[is.na(R1R2)]=mean(R1R2,na.rm=TRUE)
+    R1Clin[is.na(R1Clin)]=mean(R1Clin,na.rm=TRUE)
+    R2Clin[is.na(R2Clin)]=mean(R2Clin,na.rm=TRUE)
+    nStudies=length(myData$study)
+    
+    data=list(
+      
+      nStudies=nStudies,
+      ClnEst= ClnEst,
+      ClnSE=ClnSE,
+      sur1Est=sur1Est,
+      sur1SE=sur1SE,
+      sur2Est=sur2Est,
+      sur2SE=sur2SE,
+      R1Clin=R1Clin,
+      R2Clin=R2Clin,
+      R1R2=R1R2
+    )
+    
+    if(length(which(myData$allrxname %in% multi_arm_trials))>1 & substr(myData$allrxname[2],1,2) == substr(myData$allrxname[1],1,2)){
+      data$nMultiArm=length(which(myData$allrxname %in% multi_arm_trials))/2
+      data$multi_arm_corrs=as.vector(unique(t(as.vector(r1[1,intersect(myData$allrxname,multi_arm_trials)]))))
+    }
+    if(length(data$multi_arm_corrs)==1 & length(which(myData$allrxname %in% multi_arm_trials))>1){
+      data$multi_arm_corrs=as.array(data$multi_arm_corrs)
+    }
+    
+      
+  }
+ 
+  
+  if (model_type == "random" & length(independent_effects) == 1) {
+    
+    myModel1 = paste("data{",
+                     
+                     "int nStudies;",
+                     
+                     "vector[nStudies] sur1Est;",
+                     "vector[nStudies] sur1SE;",
+                     
+                     "vector[nStudies] ClnEst;",
+                     "vector[nStudies] ClnSE;",
+                     
+                     "vector[nStudies] R1Clin;",
+                     
+                     "}",
+                     
+                     "parameters{",
+                     
+                     "matrix[nStudies,2] withinStudyMeans;",
+                     
+                     "real alphaClinonSur1;",
+                     "real betaClinonSur1;",
+                     "real<lower=0> sigSqClinonSur1;",
+                     "real muSur1;",
+                     "real<lower=0> sigSqSur1;",
+                     
+                     "}",
+                     
+                     "model{",
+                     
+                     "for(jj in 1:nStudies){",
+                     
+                     "vector[2] myY;",
+                     "matrix[2,2] myVar;",
+                     
+                     "// Set-up within study vector of observed effects",
+                     "myY[1]=ClnEst[jj];",
+                     "myY[2]=sur1Est[jj];",
+                     
+                     "// Set-up within study covariance matrix",
+                     "myVar[1,1]=ClnSE[jj]^2;",
+                     "myVar[1,2]=ClnSE[jj]*sur1SE[jj]*R1Clin[jj];",
+                     
+                     "myVar[2,1]=sur1SE[jj]*ClnSE[jj]*R1Clin[jj];",
+                     "myVar[2,2]=sur1SE[jj]^2;",
+                     
+                     "// Gaussian within study model",
+                     "myY~multi_normal(withinStudyMeans[jj,],myVar);",
+                     
+                     "// Between study model for withinStudyMeans",
+                     "withinStudyMeans[jj,2]~normal(muSur1,sqrt(sigSqSur1));",
+                     "withinStudyMeans[jj,1]~normal(alphaClinonSur1+
+                                        betaClinonSur1*withinStudyMeans[jj,2],
+                                        sqrt(sigSqClinonSur1));",
+                     
+                     "}",
+                     
+                     "alphaClinonSur1~normal(0,100);",
+                     "muSur1~normal(0,100);",
+                     paste("betaClinonSur1~",beta_prior,";",sep=""),
+                     
+                     paste("sigSqSur1~",sur_var_prior,";",sep=""),
+                     paste("sigSqClinonSur1~",error_var_prior,";",sep=""),
+                     
+                     "}",sep = "\n")
+    
+    myModel2 = paste("data{",
+                     
+                     "int nStudies;",
+                     
+                     "vector[nStudies] sur1Est;",
+                     "vector[nStudies] sur1SE;",
+                     
+                     "vector[nStudies] ClnEst;",
+                     "vector[nStudies] ClnSE;",
+                     
+                     "vector[nStudies] R1Clin;",
+                     
+                     "int nMultiArm;",
+                     
+                     "vector[nMultiArm] multi_arm_corrs;",
+                     
+                     "}",
+                     
+                     "parameters{",
+                     
+                     "matrix[nStudies-2*nMultiArm,2] withinStudyMeans;",
+                     "matrix[nMultiArm,4] withinStudyMeansBig;",
+                     
+                     "real alphaClinonSur1;",
+                     "real betaClinonSur1;",
+                     "real<lower=0> sigSqClinonSur1;",
+                     "real muSur1;",
+                     "real<lower=0> sigSqSur1;",
+                     
+                     "}",
+                     
+                     "model{",
+                     
+                     "for(jj in 1:nMultiArm) {",
+                     
+                     "vector[4] myYbig;",
+                     
+                     "matrix[4,4] myVarbig;",
+                     
+                     "myYbig[1]=ClnEst[2*jj-1];",
+                     "myYbig[2]=sur1Est[2*jj-1];",
+                     "myYbig[3]=ClnEst[2*jj];",
+                     "myYbig[4]=sur1Est[2*jj];",
+                     
+                     "myVarbig[1,1]=ClnSE[2*jj-1]^2;",
+                     "myVarbig[2,2]=sur1SE[2*jj-1]^2;",
+                     "myVarbig[3,3]=ClnSE[2*jj]^2;",
+                     "myVarbig[4,4]=sur1SE[2*jj]^2;",
+                     "myVarbig[1,2]=R1Clin[2*jj-1]*ClnSE[2*jj-1]*sur1SE[2*jj-1];",
+                     "myVarbig[2,1]=R1Clin[2*jj-1]*ClnSE[2*jj-1]*sur1SE[2*jj-1];",
+                     "myVarbig[3,4]=R1Clin[2*jj]*ClnSE[2*jj]*sur1SE[2*jj];",
+                     "myVarbig[4,3]=R1Clin[2*jj]*ClnSE[2*jj]*sur1SE[2*jj];",
+                     "myVarbig[1,3]=multi_arm_corrs[jj]*ClnSE[2*jj-1]*ClnSE[2*jj];",
+                     "myVarbig[3,1]=multi_arm_corrs[jj]*ClnSE[2*jj-1]*ClnSE[2*jj];",
+                     "myVarbig[2,4]=multi_arm_corrs[jj]*sur1SE[2*jj-1]*sur1SE[2*jj];",
+                     "myVarbig[4,2]=multi_arm_corrs[jj]*sur1SE[2*jj-1]*sur1SE[2*jj];",
+                     "myVarbig[1,4]=multi_arm_corrs[jj]*R1Clin[2*jj-1]*ClnSE[2*jj-1]*sur1SE[2*jj];",
+                     "myVarbig[4,1]=multi_arm_corrs[jj]*R1Clin[2*jj-1]*ClnSE[2*jj-1]*sur1SE[2*jj];",
+                     "myVarbig[3,2]=multi_arm_corrs[jj]*R1Clin[2*jj]*ClnSE[2*jj]*sur1SE[2*jj-1];",
+                     "myVarbig[2,3]=multi_arm_corrs[jj]*R1Clin[2*jj]*ClnSE[2*jj]*sur1SE[2*jj-1];",
+                     
+                     "myYbig~multi_normal(withinStudyMeansBig[jj,],myVarbig);",
+                     
+                     "// Between study model for withinStudyMeans",
+                     "withinStudyMeansBig[jj,2]~normal(muSur1,sqrt(sigSqSur1));",
+                     "withinStudyMeansBig[jj,4]~normal(muSur1,sqrt(sigSqSur1));",
+                     "withinStudyMeansBig[jj,1]~normal(alphaClinonSur1+
+                                                betaClinonSur1*withinStudyMeansBig[jj,2],
+                                                sqrt(sigSqClinonSur1));",
+                     "withinStudyMeansBig[jj,3]~normal(alphaClinonSur1+
+                                                betaClinonSur1*withinStudyMeansBig[jj,4],
+                                                sqrt(sigSqClinonSur1));",
+                     
+                     "}",
+                     
+                     "for(jj in (2*nMultiArm+1):nStudies){",
+                     
+                     "vector[2] myY;",
+                     "matrix[2,2] myVar;",
+                     
+                     "// Set-up within study vector of observed effects",
+                     "myY[1]=ClnEst[jj];",
+                     "myY[2]=sur1Est[jj];",
+                     
+                     "// Set-up within study covariance matrix",
+                     "myVar[1,1]=ClnSE[jj]^2;",
+                     "myVar[1,2]=ClnSE[jj]*sur1SE[jj]*R1Clin[jj];",
+                     
+                     "myVar[2,1]=sur1SE[jj]*ClnSE[jj]*R1Clin[jj];",
+                     "myVar[2,2]=sur1SE[jj]^2;",
+                     
+                     "// Gaussian within study model",
+                     "myY~multi_normal(withinStudyMeans[jj-2*nMultiArm,],myVar);",
+                     
+                     "// Between study model for withinStudyMeans",
+                     "withinStudyMeans[jj-2*nMultiArm,2]~normal(muSur1,sqrt(sigSqSur1));",
+                     "withinStudyMeans[jj-2*nMultiArm,1]~normal(alphaClinonSur1+
+                                        betaClinonSur1*withinStudyMeans[jj-2*nMultiArm,2],
+                                        sqrt(sigSqClinonSur1));",
+                     
+                     "}",
+                     
+                     "alphaClinonSur1~normal(0,100);",
+                     "muSur1~normal(0,100);",
+                     paste("betaClinonSur1~",beta_prior,";",sep=""),
+                     
+                     paste("sigSqSur1~",sur_var_prior,";",sep=""),
+                     paste("sigSqClinonSur1~",error_var_prior,";",sep=""),
+                     
+                     "}",sep = "\n")
+    
+    if(class(data$nMultiArm) == "NULL"){
+      myModel=myModel1
+    } else {
+      myModel=myModel2
+    }
+    
+    stanmod=stan(model_code=myModel,
+                 data=data,iter=num.iter,chains=num_chains,
+                 control=list(adapt_delta=0.99,max_treedepth=25))
+    
+    alpha=unlist(extract(stanmod,"alphaClinonSur1",permuted=TRUE))
+    beta=unlist(extract(stanmod,"betaClinonSur1",permuted=TRUE))
+    muSur=unlist(extract(stanmod,"muSur1",permuted=TRUE))
+    sigSqSur=unlist(extract(stanmod,"sigSqSur1",permuted=TRUE))
+    sigSqClinonSur=unlist(extract(stanmod,"sigSqClinonSur1",permuted=TRUE))
+    muClin=alpha+beta*muSur
+    Rsquare=1-sigSqClinonSur/((beta^2)*sigSqSur + sigSqClinonSur)
+    sigSqClin=(beta^2)*sigSqSur + sigSqClinonSur
+    ClnSurCovar=beta*sigSqSur
+    
+    if (num_chains > 1) {
+      sfdat = as.data.frame(summary(stanmod, pars = c("alphaClinonSur1","betaClinonSur1","sigSqClinonSur1"))$summary)
+      gelmans = paste(round(sfdat$Rhat, 3))
+    }
+    else if (num_chains == 1) {gelmans = "NA, 1-chain"}
+    
+    mcmcData=as.data.frame(cbind(seq(from=1,to=length(alpha),by=1),alpha,beta,muSur,sigSqSur,sigSqClinonSur,muClin,Rsquare,sigSqClin,ClnSurCovar))
+    colnames(mcmcData)=c("iteration","alpha","beta","muSur","sigSqSur","sigSqClinonSur","muClin","Rsquare","sigSqClin","ClnSurCovar")
+  }
+  
+  
+  if (model_type == "fixed" & length(independent_effects) == 1) {
+    
+    myModel1 = paste("data{",
+                     
+                     "int nStudies;",
+                     
+                     "vector[nStudies] sur1Est;",
+                     "vector[nStudies] sur1SE;",
+                     
+                     "vector[nStudies] ClnEst;",
+                     "vector[nStudies] ClnSE;",
+                     
+                     "vector[nStudies] R1Clin;",
+                     
+                     "}",
+                     
+                     "parameters{",
+                     
+                     "matrix[nStudies,2] withinStudyMeans;",
+                     
+                     "real alphaClinonSur1;",
+                     "real betaClinonSur1;",
+                     "real<lower=0> sigSqClinonSur1;",
+                     
+                     "}",
+                     
+                     "model{",
+                     
+                     "for(jj in 1:nStudies){",
+                     
+                     "vector[2] myY;",
+                     "matrix[2,2] myVar;",
+                     
+                     "// Set-up within study vector of observed effects",
+                     "myY[1]=ClnEst[jj];",
+                     "myY[2]=sur1Est[jj];",
+                     
+                     "// Set-up within study covariance matrix",
+                     "myVar[1,1]=ClnSE[jj]^2;",
+                     "myVar[1,2]=ClnSE[jj]*sur1SE[jj]*R1Clin[jj];",
+                     
+                     "myVar[2,1]=sur1SE[jj]*ClnSE[jj]*R1Clin[jj];",
+                     "myVar[2,2]=sur1SE[jj]^2;",
+                     
+                     "// Gaussian within study model",
+                     "myY~multi_normal(withinStudyMeans[jj,],myVar);",
+                     
+                     "// Between study model for withinStudyMeans",
+                     "withinStudyMeans[jj,2]~normal(0,20);",
+                     "withinStudyMeans[jj,1]~normal(alphaClinonSur1+
+                                        betaClinonSur1*withinStudyMeans[jj,2],
+                                        sqrt(sigSqClinonSur1));",
+                     
+                     "}",
+                     
+                     "alphaClinonSur1~normal(0,5);",
+                     paste("betaClinonSur1~",beta_prior,";",sep=""),
+                     
+                     paste("sigSqClinonSur1~",error_var_prior,";",sep=""),
+                     
+                     "}",sep = "\n")
+    
+    myModel2 = paste("data{",
+                     
+                     "int nStudies;",
+                     
+                     "vector[nStudies] sur1Est;",
+                     "vector[nStudies] sur1SE;",
+                     
+                     "vector[nStudies] ClnEst;",
+                     "vector[nStudies] ClnSE;",
+                     
+                     "vector[nStudies] R1Clin;",
+                     
+                     "int nMultiArm;",
+                     
+                     "vector[nMultiArm] multi_arm_corrs;",
+                     
+                     "}",
+                     
+                     "parameters{",
+                     
+                     "matrix[nStudies-2*nMultiArm,2] withinStudyMeans;",
+                     "matrix[nMultiArm,4] withinStudyMeansBig;",
+                     
+                     "real alphaClinonSur1;",
+                     "real betaClinonSur1;",
+                     "real<lower=0> sigSqClinonSur1;",
+                     
+                     "}",
+                     
+                     "model{",
+                     
+                     "for(jj in 1:nMultiArm) {",
+                     
+                     "vector[4] myYbig;",
+                     
+                     "matrix[4,4] myVarbig;",
+                     
+                     "myYbig[1]=ClnEst[(2*jj)-1];",
+                     "myYbig[2]=sur1Est[(2*jj)-1];",
+                     "myYbig[3]=ClnEst[2*jj];",
+                     "myYbig[4]=sur1Est[2*jj];",
+                     
+                     "myVarbig[1,1]=ClnSE[(2*jj)-1]^2;",
+                     "myVarbig[2,2]=sur1SE[(2*jj)-1]^2;",
+                     "myVarbig[3,3]=ClnSE[2*jj]^2;",
+                     "myVarbig[4,4]=sur1SE[2*jj]^2;",
+                     "myVarbig[1,2]=R1Clin[(2*jj)-1]*ClnSE[(2*jj)-1]*sur1SE[(2*jj)-1];",
+                     "myVarbig[2,1]=R1Clin[(2*jj)-1]*ClnSE[(2*jj)-1]*sur1SE[(2*jj)-1];",
+                     "myVarbig[3,4]=R1Clin[2*jj]*ClnSE[2*jj]*sur1SE[2*jj];",
+                     "myVarbig[4,3]=R1Clin[2*jj]*ClnSE[2*jj]*sur1SE[2*jj];",
+                     "myVarbig[1,3]=multi_arm_corrs[jj]*ClnSE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[3,1]=multi_arm_corrs[jj]*ClnSE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[2,4]=multi_arm_corrs[jj]*sur1SE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[4,2]=multi_arm_corrs[jj]*sur1SE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[1,4]=multi_arm_corrs[jj]*R1Clin[(2*jj)-1]*ClnSE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[4,1]=multi_arm_corrs[jj]*R1Clin[(2*jj)-1]*ClnSE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[3,2]=multi_arm_corrs[jj]*R1Clin[2*jj]*ClnSE[2*jj]*sur1SE[(2*jj)-1];",
+                     "myVarbig[2,3]=multi_arm_corrs[jj]*R1Clin[2*jj]*ClnSE[2*jj]*sur1SE[(2*jj)-1];",
+                     
+                     "myYbig~multi_normal(withinStudyMeansBig[jj,],myVarbig);",
+                     
+                     "// Between study model for withinStudyMeans",
+                     "withinStudyMeansBig[jj,2]~normal(0,20);",
+                     "withinStudyMeansBig[jj,4]~normal(0,20);",
+                     "withinStudyMeansBig[jj,1]~normal(alphaClinonSur1+
+                                                betaClinonSur1*withinStudyMeansBig[jj,2],
+                                                sqrt(sigSqClinonSur1));",
+                     "withinStudyMeansBig[jj,3]~normal(alphaClinonSur1+
+                                                betaClinonSur1*withinStudyMeansBig[jj,4],
+                                                sqrt(sigSqClinonSur1));",
+                     
+                     "}",
+                     
+                     "for(jj in (2*nMultiArm+1):nStudies){",
+                     
+                     "vector[2] myY;",
+                     "matrix[2,2] myVar;",
+                     
+                     "// Set-up within study vector of observed effects",
+                     "myY[1]=ClnEst[jj];",
+                     "myY[2]=sur1Est[jj];",
+                     
+                     "// Set-up within study covariance matrix",
+                     "myVar[1,1]=ClnSE[jj]^2;",
+                     "myVar[1,2]=ClnSE[jj]*sur1SE[jj]*R1Clin[jj];",
+                     
+                     "myVar[2,1]=sur1SE[jj]*ClnSE[jj]*R1Clin[jj];",
+                     "myVar[2,2]=sur1SE[jj]^2;",
+                     
+                     "// Gaussian within study model",
+                     "myY~multi_normal(withinStudyMeans[jj-(2*nMultiArm),],myVar);",
+                     
+                     "// Between study model for withinStudyMeans",
+                     "withinStudyMeans[jj-(2*nMultiArm),2]~normal(0,20);",
+                     "withinStudyMeans[jj-(2*nMultiArm),1]~normal(alphaClinonSur1+
+                                        betaClinonSur1*withinStudyMeans[jj-(2*nMultiArm),2],
+                                        sqrt(sigSqClinonSur1));",
+                     
+                     "}",
+                     
+                     "alphaClinonSur1~normal(0,100);",
+                     paste("betaClinonSur1~",beta_prior,";",sep=""),
+                     
+                     paste("sigSqClinonSur1~",error_var_prior,";",sep=""),
+                     
+                     "}",sep = "\n")
+    
+    if(class(data$nMultiArm) == "NULL"){
+      myModel=myModel1
+    } else {
+      myModel=myModel2
+    }
+    
+    
+    stanmod=stan(model_code = myModel,
+                 data=data,iter=num.iter,chains=num_chains,
+                 control=list(adapt_delta=0.99,max_treedepth=25))
+    
+    alpha=unlist(extract(stanmod,"alphaClinonSur1",permuted=TRUE))
+    beta=unlist(extract(stanmod,"betaClinonSur1",permuted=TRUE))
+    sigSqClinonSur=unlist(extract(stanmod,"sigSqClinonSur1",permuted=TRUE))
+    
+    if (num_chains > 1) {
+      sfdat = as.data.frame(summary(stanmod, pars = c("alphaClinonSur1","betaClinonSur1","sigSqClinonSur1"))$summary)
+      gelmans = paste(round(sfdat$Rhat, 3))
+    }
+    else if (num_chains == 1) {gelmans = "NA, 1-chain"}
+    
+    trial.surs = matrix(NA,nrow=num.iter,ncol=dim(myData)[1])
+    for(i in 1:dim(myData)[1]) {
+      
+      trial.surs[,i] = unlist(extract(stanmod,paste("withinStudyMeans[",i,",2]",sep=""),permuted=TRUE))
+      
+    }
+    
+    approx.surVars = apply(trial.surs, 2, var)
+    
+    Rsquare = 1-sigSqClinonSur/((beta^2)*approx.surVars + sigSqClinonSur)
+    
+    mcmcData=as.data.frame(cbind(seq(from=1,to=length(alpha),by=1),alpha,beta,sigSqClinonSur,Rsquare))
+    colnames(mcmcData)=c("iteration","alpha","beta","sigSqClinonSur","Rsquare")
+    
+  }
+  
+  if (model_type == "random" & length(independent_effects) == 2) {
+    
+    myModel1 = paste("data{",
+                     
+                     "int nStudies;",
+                     
+                     "vector[nStudies] sur1Est;",
+                     "vector[nStudies] sur1SE;",
+                     "vector[nStudies] sur2Est;",
+                     "vector[nStudies] sur2SE;",
+                     "vector[nStudies] ClnEst;",
+                     "vector[nStudies] ClnSE;",
+                     
+                     "vector[nStudies] R1Clin;",
+                     "vector[nStudies] R2Clin;",
+                     "vector[nStudies] R1R2;",
+                     
+                     "}",
+                     
+                     "parameters{",
+                     
+                     "matrix[nStudies,3] withinStudyMeans;",
+                     
+                     "real muSur2;",
+                     "real<lower=0> sigSqSur2;",
+                     "real alphaSur1onSur2;",
+                     "real betaSur1onSur2;",
+                     "real<lower=0> sigSqSur1onSur2;",
+                     
+                     "real alphaClinonSur1Sur2;",
+                     "real beta1ClinonSur1Sur2;",
+                     "real beta2ClinonSur1Sur2;",
+                     "real<lower=0> sigSqClinonSur1Sur2;",
+                     
+                     "}",
+                     
+                     "model{",
+                     
+                     "for(jj in 1:nStudies){",
+                     
+                     "vector[3] myY;",
+                     "matrix[3,3] myVar;",
+                     
+                     "// Set-up within study vector of observed effects",
+                     "myY[1]=ClnEst[jj];",
+                     "myY[2]=sur1Est[jj];",
+                     "myY[3]=sur2Est[jj];",
+                     
+                     "// Set-up within study covariance matrix",
+                     "myVar[1,1]=ClnSE[jj]^2;",
+                     "myVar[1,2]=ClnSE[jj]*sur1SE[jj]*R1Clin[jj];",
+                     "myVar[1,3]=ClnSE[jj]*sur2SE[jj]*R2Clin[jj];",
+                     "myVar[2,1]=ClnSE[jj]*sur1SE[jj]*R1Clin[jj];",
+                     "myVar[3,1]=ClnSE[jj]*sur2SE[jj]*R2Clin[jj];",
+                     "myVar[2,2]=sur1SE[jj]^2;",
+                     "myVar[3,3]=sur2SE[jj]^2;",
+                     "myVar[2,3]=R1R2[jj]*sur1SE[jj]*sur2SE[jj];",
+                     "myVar[3,2]=R1R2[jj]*sur1SE[jj]*sur2SE[jj];",
+                     
+                     "// Gaussian within study model",
+                     "myY~multi_normal(withinStudyMeans[jj,],myVar);",
+                     
+                     "// Between study model for withinStudyMeans",
+                     "withinStudyMeans[jj,3]~normal(muSur2,
+                                                  sqrt(sigSqSur2));",
+                     
+                     "withinStudyMeans[jj,2]~normal(alphaSur1onSur2 + betaSur1onSur2*withinStudyMeans[jj,3],sqrt(sigSqSur1onSur2));", 
+                     
+                     "withinStudyMeans[jj,1]~normal(alphaClinonSur1Sur2+
+                                beta1ClinonSur1Sur2*withinStudyMeans[jj,2]+
+				                        beta2ClinonSur1Sur2*withinStudyMeans[jj,3],
+                                sqrt(sigSqClinonSur1Sur2));",
+                     
+                     "}",
+                     
+                     "muSur2~normal(0,100);",
+                     "alphaSur1onSur2~normal(0,100);",
+                     "alphaClinonSur1Sur2~normal(0,100);",
+                     
+                     paste("betaSur1onSur2~",beta_prior,";",sep=""),
+                     paste("beta1ClinonSur1Sur2~",beta_prior_1,";",sep=""),
+                     paste("beta2ClinonSur1Sur2~",beta_prior_2,";",sep=""),
+                     
+                     paste("sigSqSur2~",sur_var_prior,";",sep=""),
+                     paste("sigSqClinonSur1Sur2~",error_var_prior,";",sep=""),
+                     paste("sigSqSur1onSur2~",error_var_prior_2,";",sep=""),
+                     
+                     "}",sep = "\n")
+    
+    myModel2 = paste("data{",
+                     
+                     "int nStudies;",
+                     
+                     "vector[nStudies] sur1Est;",
+                     "vector[nStudies] sur1SE;",
+                     "vector[nStudies] sur2Est;",
+                     "vector[nStudies] sur2SE;",
+                     "vector[nStudies] ClnEst;",
+                     "vector[nStudies] ClnSE;",
+                     
+                     "vector[nStudies] R1Clin;",
+                     "vector[nStudies] R2Clin;",
+                     "vector[nStudies] R1R2;",
+                     
+                     "int nMultiArm;",
+                     
+                     "vector[nMultiArm] multi_arm_corrs;",
+                     
+                     "}",
+                     
+                     "parameters{",
+                     
+                     "matrix[nStudies,3] withinStudyMeans;",
+                     "matrix[nMultiArm,6] withinStudyMeansBig;",
+                     
+                     "real muSur2;",
+                     "real<lower=0> sigSqSur2;",
+                     "real alphaSur1onSur2;",
+                     "real betaSur1onSur2;",
+                     "real<lower=0> sigSqSur1onSur2;",
+                     
+                     "real alphaClinonSur1Sur2;",
+                     "real beta1ClinonSur1Sur2;",
+                     "real beta2ClinonSur1Sur2;",
+                     "real<lower=0> sigSqClinonSur1Sur2;",
+                     
+                     "}",
+                     
+                     "model{",
+                     
+                     "for(jj in 1:nMultiArm) {",
+                     
+                     "vector[6] myYbig;",
+                     
+                     "matrix[6,6] myVarbig;",
+                     
+                     "myYbig[1]=ClnEst[(2*jj)-1];",
+                     "myYbig[2]=sur1Est[(2*jj)-1];",
+                     "myYbig[3]=sur2Est[(2*jj)-1];",
+                     "myYbig[4]=ClnEst[2*jj];",
+                     "myYbig[5]=sur1Est[2*jj];",
+                     "myYbig[6]=sur1Est[2*jj];",
+                     
+                     "myVarbig[1,1]=ClnSE[(2*jj)-1]^2;",
+                     "myVarbig[2,2]=sur1SE[(2*jj)-1]^2;",
+                     "myVarbig[3,3]=sur2SE[(2*jj)-1]^2;",
+                     "myVarbig[4,4]=ClnSE[2*jj]^2;",
+                     "myVarbig[5,5]=sur1SE[2*jj]^2;",
+                     "myVarbig[6,6]=sur2SE[2*jj]^2;",
+                     "myVarbig[1,2]=R1Clin[(2*jj)-1]*sur1SE[(2*jj)-1]*ClnSE[(2*jj)-1];",
+                     "myVarbig[2,1]=R1Clin[(2*jj)-1]*sur1SE[(2*jj)-1]*ClnSE[(2*jj)-1];",
+                     "myVarbig[1,3]=R2Clin[(2*jj)-1]*sur2SE[(2*jj)-1]*ClnSE[(2*jj)-1];",
+                     "myVarbig[3,1]=R2Clin[(2*jj)-1]*sur2SE[(2*jj)-1]*ClnSE[(2*jj)-1];",
+                     "myVarbig[2,3]=R1R2[(2*jj)-1]*sur1SE[(2*jj)-1]*sur2SE[(2*jj)-1];",
+                     "myVarbig[3,2]=R1R2[(2*jj)-1]*sur1SE[(2*jj)-1]*sur2SE[(2*jj)-1];",
+                     "myVarbig[4,5]=R1Clin[2*jj]*sur1SE[2*jj]*ClnSE[2*jj];",
+                     "myVarbig[5,4]=R1Clin[2*jj]*sur1SE[2*jj]*ClnSE[2*jj];",
+                     "myVarbig[4,6]=R2Clin[2*jj]*sur2SE[2*jj]*ClnSE[2*jj];",
+                     "myVarbig[6,4]=R2Clin[2*jj]*sur2SE[2*jj]*ClnSE[2*jj];",
+                     "myVarbig[6,5]=R1R2[2*jj]*sur1SE[2*jj]*sur2SE[2*jj];",
+                     "myVarbig[5,6]=R1R2[2*jj]*sur1SE[2*jj]*sur2SE[2*jj];",
+                     "myVarbig[4,1]=multi_arm_corrs[jj]*ClnSE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[1,4]=multi_arm_corrs[jj]*ClnSE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[5,1]=multi_arm_corrs[jj]*R1Clin[(2*jj)-1]*ClnSE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[1,5]=multi_arm_corrs[jj]*R1Clin[(2*jj)-1]*ClnSE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[6,1]=multi_arm_corrs[jj]*R2Clin[(2*jj)-1]*ClnSE[(2*jj)-1]*sur2SE[2*jj];",
+                     "myVarbig[1,6]=multi_arm_corrs[jj]*R2Clin[(2*jj)-1]*ClnSE[(2*jj)-1]*sur2SE[2*jj];",
+                     "myVarbig[4,2]=multi_arm_corrs[jj]*R1Clin[2*jj]*sur1SE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[2,4]=multi_arm_corrs[jj]*R1Clin[2*jj]*sur1SE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[5,2]=multi_arm_corrs[jj]*sur1SE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[2,5]=multi_arm_corrs[jj]*sur1SE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[6,2]=multi_arm_corrs[jj]*R1R2[(2*jj)-1]*sur1SE[(2*jj)-1]*sur2SE[2*jj];",
+                     "myVarbig[2,6]=multi_arm_corrs[jj]*R1R2[(2*jj)-1]*sur1SE[(2*jj)-1]*sur2SE[2*jj];",
+                     "myVarbig[4,3]=multi_arm_corrs[jj]*R2Clin[2*jj]*sur2SE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[3,4]=multi_arm_corrs[jj]*R2Clin[2*jj]*sur2SE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[5,3]=multi_arm_corrs[jj]*R1R2[2*jj]*sur2SE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[3,5]=multi_arm_corrs[jj]*R1R2[2*jj]*sur2SE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[6,3]=multi_arm_corrs[jj]*sur2SE[(2*jj)-1]*sur2SE[2*jj];",
+                     "myVarbig[3,6]=multi_arm_corrs[jj]*sur2SE[(2*jj)-1]*sur2SE[2*jj];",
+                     
+                     "myYbig~multi_normal(withinStudyMeansBig[jj,],myVarbig);",
+                     
+                     "withinStudyMeansBig[jj,3]~normal(muSur2,
+                                                  sqrt(sigSqSur2));",
+                     
+                     "withinStudyMeansBig[jj,2]~normal(alphaSur1onSur2 + betaSur1onSur2*withinStudyMeansBig[jj,3],sqrt(sigSqSur1onSur2));", 
+                     
+                     "withinStudyMeansBig[jj,1]~normal(alphaClinonSur1Sur2+
+                                beta1ClinonSur1Sur2*withinStudyMeansBig[jj,2]+
+				                        beta2ClinonSur1Sur2*withinStudyMeansBig[jj,3],
+                                sqrt(sigSqClinonSur1Sur2));",
+                     
+                     "withinStudyMeansBig[jj,6]~normal(muSur2,
+                                                  sqrt(sigSqSur2));",
+                     
+                     "withinStudyMeansBig[jj,5]~normal(alphaSur1onSur2 + betaSur1onSur2*withinStudyMeansBig[jj,6],sqrt(sigSqSur1onSur2));", 
+                     
+                     "withinStudyMeansBig[jj,4]~normal(alphaClinonSur1Sur2+
+                                beta1ClinonSur1Sur2*withinStudyMeansBig[jj,5]+
+				                        beta2ClinonSur1Sur2*withinStudyMeansBig[jj,6],
+                                sqrt(sigSqClinonSur1Sur2));",
+                     
+                     "}",
+                     
+                     "for(jj in ((2*nMultiArm)+1):nStudies){",
+                     
+                     "vector[3] myY;",
+                     "matrix[3,3] myVar;",
+                     
+                     "// Set-up within study vector of observed effects",
+                     "myY[1]=ClnEst[jj];",
+                     "myY[2]=sur1Est[jj];",
+                     "myY[3]=sur2Est[jj];",
+                     
+                     "// Set-up within study covariance matrix",
+                     "myVar[1,1]=ClnSE[jj]^2;",
+                     "myVar[1,2]=ClnSE[jj]*sur1SE[jj]*R1Clin[jj];",
+                     "myVar[1,3]=ClnSE[jj]*sur2SE[jj]*R2Clin[jj];",
+                     "myVar[2,1]=ClnSE[jj]*sur1SE[jj]*R1Clin[jj];",
+                     "myVar[3,1]=ClnSE[jj]*sur2SE[jj]*R2Clin[jj];",
+                     "myVar[2,2]=sur1SE[jj]^2;",
+                     "myVar[3,3]=sur2SE[jj]^2;",
+                     "myVar[2,3]=R1R2[jj]*sur1SE[jj]*sur2SE[jj];",
+                     "myVar[3,2]=R1R2[jj]*sur1SE[jj]*sur2SE[jj];",
+                     
+                     "// Gaussian within study model",
+                     "myY~multi_normal(withinStudyMeans[jj-2*nMultiArm,],myVar);",
+                     
+                     "// Between study model for withinStudyMeans",
+                     "withinStudyMeans[jj-2*nMultiArm,3]~normal(muSur2,
+                                                  sqrt(sigSqSur2));",
+                     
+                     "withinStudyMeans[jj-2*nMultiArm,2]~normal(alphaSur1onSur2 + betaSur1onSur2*withinStudyMeans[jj-(2*nMultiArm),3],sqrt(sigSqSur1onSur2));", 
+                     
+                     "withinStudyMeans[jj-2*nMultiArm,1]~normal(alphaClinonSur1Sur2+
+                                beta1ClinonSur1Sur2*withinStudyMeans[jj-(2*nMultiArm),2]+
+				                        beta2ClinonSur1Sur2*withinStudyMeans[jj-(2*nMultiArm),3],
+                                sqrt(sigSqClinonSur1Sur2));",
+                     
+                     "}",
+                     
+                     "muSur2~normal(0,100);",
+                     "alphaSur1onSur2~normal(0,100);",
+                     "alphaClinonSur1Sur2~normal(0,100);",
+                     
+                     paste("betaSur1onSur2~",beta_prior,";",sep=""),
+                     paste("beta1ClinonSur1Sur2~",beta_prior_1,";",sep=""),
+                     paste("beta2ClinonSur1Sur2~",beta_prior_2,";",sep=""),
+                     
+                     paste("sigSqSur2~",sur_var_prior,";",sep=""),
+                     paste("sigSqClinonSur1Sur2~",error_var_prior,";",sep=""),
+                     paste("sigSqSur1onSur2~",error_var_prior_2,";",sep=""),
+                     
+                     "}",sep = "\n")
+    
+    if(class(data$nMultiArm) == "NULL"){
+      myModel=myModel1
+    } else {
+      myModel=myModel2
+    }
+    
+    stanmod=stan(model_code = myModel,
+                 data=data,iter=num.iter,chains=num_chains,
+                 control=list(adapt_delta=0.99,max_treedepth=25))
+    
+    muSur2=unlist(extract(stanmod,"muSur2",permuted=TRUE))
+    sigSqSur2=unlist(extract(stanmod,"sigSqSur2",permuted=TRUE))
+    alphaSur1onSur2=unlist(extract(stanmod,"alphaSur1onSur2",permuted=TRUE))
+    betaSur1onSur2=unlist(extract(stanmod,"betaSur1onSur2",permuted=TRUE))
+    sigSqSur1onSur2=unlist(extract(stanmod,"sigSqSur1onSur2",permuted=TRUE))
+    alphaClinonSur1Sur2=unlist(extract(stanmod,"alphaClinonSur1Sur2",permuted=TRUE))
+    beta1ClinonSur1Sur2=unlist(extract(stanmod,"beta1ClinonSur1Sur2",permuted=TRUE))
+    beta2ClinonSur1Sur2=unlist(extract(stanmod,"beta2ClinonSur1Sur2",permuted=TRUE))
+    sigSqClinonSur1Sur2=unlist(extract(stanmod,"sigSqClinonSur1Sur2",permuted=TRUE))
+    muSur1=alphaSur1onSur2 + betaSur1onSur2*muSur2
+    muClin=alphaClinonSur1Sur2 + beta1ClinonSur1Sur2*muSur1 + beta2ClinonSur1Sur2*musur2 
+    sigSqSur1=sigSqSur1onSur2 + (betaSur1onSur2^2)*sigSqSur2
+    sigSqClin=sigSqClinonSur1Sur2 + (beta1ClinonSur1Sur2^2)*sigSqSur1 + (beta2ClinonSur1Sur2^2)*sigSqSur2
+    sur1sur2covar=betaSur1onSur2*sigSqSur2
+    ClinSur1covar=beta1ClinonSur1Sur2*sigSqSur1
+    ClinSur2covar=beta2ClinonSur1Sur2*sigSqSur2
+    RsquareClinonSur1Sur2=1-sigSqClinonSur1Sur2/(sigSqClin)
+    RsquareSur1onSur2=1-sigSqSur1onSur2/(sigSqSur1)
+    
+    if (num_chains > 1) {
+      sfdat = as.data.frame(summary(stanmod, pars = c("alphaClinonSur1Sur2","beta1ClinonSur1Sur2","beta2ClinonSur1Sur2","sigSqClinonSur1Sur2"))$summary)
+      gelmans = paste(round(sfdat$Rhat, 3))
+    }
+    else if (num_chains == 1) {gelmans = "NA, 1-chain"}
+    
+    
+    mcmcData=as.data.frame(cbind(seq(from=1,to=length(muSur2),by=1),muSur2,sigSqSur2,alphaSur1onSur2,betaSur1onSur2,sigSqSur1onSur2,alphaClinonSur1Sur2,
+                                 beta1ClinonSur1Sur2,beta2ClinonSur1Sur2,sigSqClinonSur1Sur2,
+                                 muSur1,muClin,sigSqSur1,sigSqClin,sur1sur2covar,ClinSur1covar,
+                                 ClinSur2covar,RsquareClinonSur1Sur2,RsquareSur1onSur2))
+    colnames(mcmcData)=c("iteration","muSur2","sigSqSur2","alphaSur1onSur2","betaSur1onSur2","sigSqSur1onSur2","alphaClinonSur1Sur2",
+                         "beta1ClinonSur1Sur2","beta2ClinonSur1Sur2","sigSqClinonSur1Sur2",
+                         "muSur1","muClin","sigSqSur1","sigSqClin","sur1sur2covar","ClinSur1covar",
+                         "ClinSur2covar","RsquareClinonSur1Sur2","RsquareSur1onSur2")
+  }
+  
+  if (model_type == "fixed" & length(independent_effects) == 2) {
+    
+    myModel1 = paste("data{",
+                     
+                     "int nStudies;",
+                     
+                     "vector[nStudies] sur1Est;",
+                     "vector[nStudies] sur1SE;",
+                     "vector[nStudies] sur2Est;",
+                     "vector[nStudies] sur2SE;",
+                     "vector[nStudies] ClnEst;",
+                     "vector[nStudies] ClnSE;",
+                     
+                     "vector[nStudies] R1Clin;",
+                     "vector[nStudies] R2Clin;",
+                     "vector[nStudies] R1R2;",
+                     
+                     "}",
+                     
+                     "parameters{",
+                     
+                     "matrix[nStudies,3] withinStudyMeans;",
+                     
+                     "real alphaClinonSur1Sur2;",
+                     "real beta1ClinonSur1Sur2;",
+                     "real beta2ClinonSur1Sur2;",
+                     "real<lower=0> sigSqClinonSur1Sur2;",
+                     
+                     "}",
+                     
+                     "model{",
+                     
+                     "for(jj in 1:nStudies){",
+                     
+                     "vector[3] myY;",
+                     "matrix[3,3] myVar;",
+                     
+                     "// Set-up within study vector of observed effects",
+                     "myY[1]=ClnEst[jj];",
+                     "myY[2]=sur1Est[jj];",
+                     "myY[3]=sur2Est[jj];",
+                     
+                     "// Set-up within study covariance matrix",
+                     "myVar[1,1]=ClnSE[jj]^2;",
+                     "myVar[1,2]=ClnSE[jj]*sur1SE[jj]*R1Clin[jj];",
+                     "myVar[1,3]=ClnSE[jj]*sur2SE[jj]*R2Clin[jj];",
+                     "myVar[2,1]=ClnSE[jj]*sur1SE[jj]*R1Clin[jj];",
+                     "myVar[3,1]=ClnSE[jj]*sur2SE[jj]*R2Clin[jj];",
+                     "myVar[2,2]=sur1SE[jj]^2;",
+                     "myVar[3,3]=sur2SE[jj]^2;",
+                     "myVar[2,3]=R1R2[jj]*sur1SE[jj]*sur2SE[jj];",
+                     "myVar[3,2]=R1R2[jj]*sur1SE[jj]*sur2SE[jj];",
+                     
+                     "// Gaussian within study model",
+                     "myY~multi_normal(withinStudyMeans[jj,],myVar);",
+                     
+                     "// Between study model for withinStudyMeans",
+                     "withinStudyMeans[jj,3]~normal(0,20);",
+                     
+                     "withinStudyMeans[jj,2]~normal(0,20);", 
+                     
+                     "withinStudyMeans[jj,1]~normal(alphaClinonSur1Sur2+
+                                beta1ClinonSur1Sur2*withinStudyMeans[jj,2]+
+				                        beta2ClinonSur1Sur2*withinStudyMeans[jj,3],
+                                sqrt(sigSqClinonSur1Sur2));",
+                     
+                     "}",
+                     
+                     "alphaClinonSur1Sur2~normal(0,5);",
+                     
+                     paste("beta1ClinonSur1Sur2~",beta_prior_1,";",sep=""),
+                     paste("beta2ClinonSur1Sur2~",beta_prior_2,";",sep=""),
+                     
+                     paste("sigSqClinonSur1Sur2~",error_var_prior,";",sep=""),
+                     
+                     "}",sep = "\n")
+    
+    myModel2 = paste("data{",
+                     
+                     "int nStudies;",
+                     
+                     "vector[nStudies] sur1Est;",
+                     "vector[nStudies] sur1SE;",
+                     "vector[nStudies] sur2Est;",
+                     "vector[nStudies] sur2SE;",
+                     "vector[nStudies] ClnEst;",
+                     "vector[nStudies] ClnSE;",
+                     
+                     "vector[nStudies] R1Clin;",
+                     "vector[nStudies] R2Clin;",
+                     "vector[nStudies] R1R2;",
+                     
+                     "int nMultiArm;",
+                     
+                     "vector[nMultiArm] multi_arm_corrs;",
+                     
+                     "}",
+                     
+                     "parameters{",
+                     
+                     "matrix[nStudies,3] withinStudyMeans;",
+                     "matrix[nMultiArm,6] withinStudyMeansBig;",
+                     
+                     "real alphaClinonSur1Sur2;",
+                     "real beta1ClinonSur1Sur2;",
+                     "real beta2ClinonSur1Sur2;",
+                     "real<lower=0> sigSqClinonSur1Sur2;",
+                     
+                     "}",
+                     
+                     "model{",
+                     
+                     "for(jj in 1:nMultiArm) {",
+                     
+                     "vector[6] myYbig;",
+                     
+                     "matrix[6,6] myVarbig;",
+                     
+                     "myYbig[1]=ClnEst[(2*jj)-1];",
+                     "myYbig[2]=sur1Est[(2*jj)-1];",
+                     "myYbig[3]=sur2Est[2*jj-1];",
+                     "myYbig[4]=ClnEst[2*jj];",
+                     "myYbig[5]=sur1Est[2*jj];",
+                     "myYbig[6]=sur1Est[2*jj];",
+                     
+                     "myVarbig[1,1]=ClnSE[(2*jj)-1]^2;",
+                     "myVarbig[2,2]=sur1SE[(2*jj)-1]^2;",
+                     "myVarbig[3,3]=sur2SE[(2*jj)-1]^2;",
+                     "myVarbig[4,4]=ClnSE[2*jj]^2;",
+                     "myVarbig[5,5]=sur1SE[2*jj]^2;",
+                     "myVarbig[6,6]=sur2SE[2*jj]^2;",
+                     "myVarbig[1,2]=R1Clin[(2*jj)-1]*sur1SE[(2*jj)-1]*ClnSE[(2*jj)-1];",
+                     "myVarbig[2,1]=R1Clin[(2*jj)-1]*sur1SE[(2*jj)-1]*ClnSE[(2*jj)-1];",
+                     "myVarbig[1,3]=R2Clin[(2*jj)-1]*sur2SE[(2*jj)-1]*ClnSE[(2*jj)-1];",
+                     "myVarbig[3,1]=R2Clin[(2*jj)-1]*sur2SE[(2*jj)-1]*ClnSE[(2*jj)-1];",
+                     "myVarbig[2,3]=R1R2[(2*jj)-1]*sur1SE[(2*jj)-1]*sur2SE[(2*jj)-1];",
+                     "myVarbig[3,2]=R1R2[(2*jj)-1]*sur1SE[(2*jj)-1]*sur2SE[(2*jj)-1];",
+                     "myVarbig[4,5]=R1Clin[2*jj]*sur1SE[2*jj]*ClnSE[2*jj];",
+                     "myVarbig[5,4]=R1Clin[2*jj]*sur1SE[2*jj]*ClnSE[2*jj];",
+                     "myVarbig[4,6]=R2Clin[2*jj]*sur2SE[2*jj]*ClnSE[2*jj];",
+                     "myVarbig[6,4]=R2Clin[2*jj]*sur2SE[2*jj]*ClnSE[2*jj];",
+                     "myVarbig[6,5]=R1R2[2*jj]*sur1SE[2*jj]*sur2SE[2*jj];",
+                     "myVarbig[5,6]=R1R2[2*jj]*sur1SE[2*jj]*sur2SE[2*jj];",
+                     "myVarbig[4,1]=multi_arm_corrs[jj]*ClnSE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[1,4]=multi_arm_corrs[jj]*ClnSE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[5,1]=multi_arm_corrs[jj]*R1Clin[(2*jj)-1]*ClnSE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[1,5]=multi_arm_corrs[jj]*R1Clin[(2*jj)-1]*ClnSE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[6,1]=multi_arm_corrs[jj]*R2Clin[(2*jj)-1]*ClnSE[(2*jj)-1]*sur2SE[2*jj];",
+                     "myVarbig[1,6]=multi_arm_corrs[jj]*R2Clin[(2*jj)-1]*ClnSE[(2*jj)-1]*sur2SE[2*jj];",
+                     "myVarbig[4,2]=multi_arm_corrs[jj]*R1Clin[2*jj]*sur1SE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[2,4]=multi_arm_corrs[jj]*R1Clin[2*jj]*sur1SE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[5,2]=multi_arm_corrs[jj]*sur1SE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[2,5]=multi_arm_corrs[jj]*sur1SE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[6,2]=multi_arm_corrs[jj]*R1R2[(2*jj)-1]*sur1SE[(2*jj)-1]*sur2SE[2*jj];",
+                     "myVarbig[2,6]=multi_arm_corrs[jj]*R1R2[(2*jj)-1]*sur1SE[(2*jj)-1]*sur2SE[2*jj];",
+                     "myVarbig[4,3]=multi_arm_corrs[jj]*R2Clin[2*jj]*sur2SE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[3,4]=multi_arm_corrs[jj]*R2Clin[2*jj]*sur2SE[(2*jj)-1]*ClnSE[2*jj];",
+                     "myVarbig[5,3]=multi_arm_corrs[jj]*R1R2[2*jj]*sur2SE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[3,5]=multi_arm_corrs[jj]*R1R2[2*jj]*sur2SE[(2*jj)-1]*sur1SE[2*jj];",
+                     "myVarbig[6,3]=multi_arm_corrs[jj]*sur2SE[(2*jj)-1]*sur2SE[2*jj];",
+                     "myVarbig[3,6]=multi_arm_corrs[jj]*sur2SE[(2*jj)-1]*sur2SE[2*jj];",
+                     
+                     
+                     "myYbig~multi_normal(withinStudyMeansBig[jj,],myVarbig);",
+                     
+                     "withinStudyMeansBig[jj,3]~normal(0,20);",
+                     
+                     "withinStudyMeansBig[jj,2]~normal(0,20);", 
+                     
+                     "withinStudyMeansBig[jj,1]~normal(alphaClinonSur1Sur2+
+                                beta1ClinonSur1Sur2*withinStudyMeansBig[jj,2]+
+				                        beta2ClinonSur1Sur2*withinStudyMeansBig[jj,3],
+                                sqrt(sigSqClinonSur1Sur2));",
+                     
+                     "withinStudyMeansBig[jj,6]~normal(0,20);",
+                     
+                     "withinStudyMeansBig[jj,5]~normal(0,20);", 
+                     
+                     "withinStudyMeansBig[jj,4]~normal(alphaClinonSur1Sur2+
+                                beta1ClinonSur1Sur2*withinStudyMeansBig[jj,5]+
+				                        beta2ClinonSur1Sur2*withinStudyMeansBig[jj,6],
+                                sqrt(sigSqClinonSur1Sur2));",
+                     
+                     "}",
+                     
+                     "for(jj in (2*nMultiArm+1):nStudies){",
+                     
+                     "vector[3] myY;",
+                     "matrix[3,3] myVar;",
+                     
+                     "// Set-up within study vector of observed effects",
+                     "myY[1]=ClnEst[jj];",
+                     "myY[2]=sur1Est[jj];",
+                     "myY[3]=sur2Est[jj];",
+                     
+                     "// Set-up within study covariance matrix",
+                     "myVar[1,1]=ClnSE[jj]^2;",
+                     "myVar[1,2]=ClnSE[jj]*sur1SE[jj]*R1Clin[jj];",
+                     "myVar[1,3]=ClnSE[jj]*sur2SE[jj]*R2Clin[jj];",
+                     "myVar[2,1]=ClnSE[jj]*sur1SE[jj]*R1Clin[jj];",
+                     "myVar[3,1]=ClnSE[jj]*sur2SE[jj]*R2Clin[jj];",
+                     "myVar[2,2]=sur1SE[jj]^2;",
+                     "myVar[3,3]=sur2SE[jj]^2;",
+                     "myVar[2,3]=R1R2[jj]*sur1SE[jj]*sur2SE[jj];",
+                     "myVar[3,2]=R1R2[jj]*sur1SE[jj]*sur2SE[jj];",
+                     
+                     "// Gaussian within study model",
+                     "myY~multi_normal(withinStudyMeans[jj-2*nMultiArm,],myVar);",
+                     
+                     "// Between study model for withinStudyMeans",
+                     "withinStudyMeans[jj-2*nMultiArm,3]~normal(0,20);",
+                     
+                     "withinStudyMeans[jj-2*nMultiArm,2]~normal(0,20);", 
+                     
+                     "withinStudyMeans[jj-2*nMultiArm,1]~normal(alphaClinonSur1Sur2+
+                                beta1ClinonSur1Sur2*withinStudyMeans[jj-(2*nMultiArm),2]+
+				                        beta2ClinonSur1Sur2*withinStudyMeans[jj-(2*nMultiArm),3],
+                                sqrt(sigSqClinonSur1Sur2));",
+                     
+                     "}",
+                     
+                     "alphaClinonSur1Sur2~normal(0,5);",
+                     
+                     paste("beta1ClinonSur1Sur2~",beta_prior_1,";",sep=""),
+                     paste("beta2ClinonSur1Sur2~",beta_prior_2,";",sep=""),
+                     
+                     paste("sigSqClinonSur1Sur2~",error_var_prior,";",sep=""),
+                     
+                     "}",sep = "\n")
+    
+    if(class(data$nMultiArm) == "NULL"){
+      myModel=myModel1
+    } else {
+      myModel=myModel2
+    }
+    
+    stanmod=stan(model_code = myModel,
+                 data=data,iter=num.iter,chains=num_chains,
+                 control=list(adapt_delta=0.99,max_treedepth=25))
+    
+    alphaClinonSur1Sur2=unlist(extract(stanmod,"alphaClinonSur1Sur2",permuted=TRUE))
+    beta1ClinonSur1Sur2=unlist(extract(stanmod,"beta1ClinonSur1Sur2",permuted=TRUE))
+    beta2ClinonSur1Sur2=unlist(extract(stanmod,"beta2ClinonSur1Sur2",permuted=TRUE))
+    sigSqClinonSur1Sur2=unlist(extract(stanmod,"sigSqClinonSur1Sur2",permuted=TRUE))
+    
+    if (num_chains > 1) {
+      sfdat = as.data.frame(summary(stanmod, pars = c("alphaClinonSur1Sur2","beta1ClinonSur1Sur2","beta2ClinonSur1Sur2","sigSqClinonSur1Sur2"))$summary)
+      gelmans = paste(round(sfdat$Rhat, 3))
+    }
+    else if (num_chains == 1) {gelmans = "NA, 1-chain"}
+    
+    trial.surs1 = matrix(NA,nrow=num.iter,ncol=dim(myData)[1])
+    trial.surs2 = matrix(NA,nrow=num.iter,ncol=dim(myData)[1])
+    
+    for(i in 1:dim(myData)[1]) {
+      
+      trial.surs1[,i] = unlist(extract(stanmod,paste("withinStudyMeans[",i,",2]",sep=""),permuted=TRUE))
+      trial.surs2[,i] = unlist(extract(stanmod,paste("withinStudyMeans[",i,",3]",sep=""),permuted=TRUE))
+      
+    }
+    
+    approx.sur1Vars = apply(trial.surs1, 2, var)
+    approx.sur2Vars = apply(trial.surs2, 2, var)
+    
+    RsquareClinonSur1Sur2=1-sigSqClinonSur1Sur2/(sigSqClinonSur1Sur2 + (beta1ClinonSur1Sur2^2)*approx.sur1Vars + (beta2ClinonSur1Sur2^2)*approx.sur2Vars)
+    
+    mcmcData=as.data.frame(cbind(seq(from=1,to=length(alphaClinonSur1Sur2),by=1),alphaClinonSur1Sur2,beta1ClinonSur1Sur2,beta2ClinonSur1Sur2,sigSqClinonSur1Sur2,RsquareClinonSur1Sur2))
+    colnames(mcmcData) = c("iteration","alphaClinonSur1Sur2","beta1ClinonSur1Sur2","beta2ClinonSur1Sur2","sigSqClinonSur1Sur2","RsquareClinonSur1Sur2")
+    
+  }
+  
+  myCodas=stan2coda(stanmod)
+  effSamps=effectiveSize(myCodas)
+  ess.min=min(effSamps)
+  ess.var=names(effSamps)[which.min(effSamps)]
+  
+  model.info=c(paste("PS_data_",model_number,".csv",sep=""),
+               as.character(data_file),as.character(pooled),as.character(eventnumber),as.character(outcome_SE_cutoff),
+               as.character(paste(exclude_interventions,collapse=",")),as.character(paste(exclude_trial_names,collapse=",")),
+               
+               if(is.na(subset_description_1)){"N/A"} else {subset_description_1},
+               if(is.na(subset_description_2)){"N/A"} else {subset_description_2},
+               if(is.na(subset_description_3)){"N/A"} else {subset_description_3},
+               
+               as.character(outcome),as.character(paste(independent_effects,collapse=",")),
+               as.character(model_type),
+               as.character(num.iter),
+               
+               ifelse(model_type=="random",as.character(sur_var_prior),"N/A"),
+               as.character(error_var_prior),
+               
+               ifelse(length(independent_effects)>1,as.character(error_var_prior_2),"N/A"),
+               
+               as.character(beta_prior),
+               ifelse(length(independent_effects)>1,as.character(beta_prior_1),"N/A"),
+               ifelse(length(independent_effects)>1,as.character(beta_prior_2),"N/A"),
+               
+               as.character(follow_up_ACR),as.character(follow_up_GFR),
+               
+               if(length(multi_arm_trials) == 1){"N/A"} else {as.character(paste(multi_arm_trials,collapse=","))},
+               if(length(multi_arm_corrs) == 1){"N/A"} else {as.character(paste(multi_arm_corrs,collapse=","))},
+               
+               as.character(ess.var),as.character(ess.min),
+               as.character(effSamps[names(effSamps) %in% c("betaClinonSur1", "beta1ClinonSur1Sur2")]),
+               ifelse(length(effSamps[names(effSamps) %in% c("beta2ClinonSur1Sur2")])>0,as.character(effSamps[names(effSamps) %in% c("beta2ClinonSur1Sur2")]),"NA"),
+               as.character(effSamps[names(effSamps) %in% c("sigSqClinonSur1","sigSqClinonSur1Sur2")]),
+               as.character(effSamps[names(effSamps) %in% c("alphaClinonSur1","alphaClinonSur1Sur2")]),
+               num_chains,
+               if(num_chains > 1){as.character(gelmans[1])}else{"N/A"},
+               if(num_chains > 1){as.character(gelmans[2])}else{"N/A"},
+               if(num_chains > 1){if(length(gelmans) == 3){"NA"}else{as.character(gelmans[3])}}else{"N/A"},
+               if(num_chains > 1){if(length(gelmans)==3){as.character(gelmans[3])}else{gelmans[4]}}else{"N/A"})
+  
+  model.info=as.data.frame(t(model.info))
+  colnames(model.info)=c("posteriors_saved_file","trial_data_used","pooled","eventnumber","outcome_SE_Cutoff",
+                         "excluded_interventions","excluded_trial_names","subset condition 1","subset condition 2",
+                         "subset condition 3","outcome_in_regression","independent_effects_in_regression",
+                         "model_type","number_mcmc_iterations","surrogate_variance_prior","error_variance_prior",
+                         "error_variance_prior_Sur1onSur2", "metareg_slope_prior","metareg_slope_prior_1","metareg_slope_prior_2","follow_up_ACRChange", "GFR_slope_length",
+                         "multi_arm_trial_names","multi_arm_corrs","variable_smallest_ESS","smallest_ESS", "ESS_meta-reg_Slope_1","ESS_meta-reg_slope_2","ESS_meta-reg_ERRSD","ESS_meta-reg_intercept",
+                         "num_chains","GR Alpha","GR Beta1","GR Beta2", "GR Error-SD")
+  
+  
+  mylist=list(myData,mcmcData,stanmod,model.info)
+  
+  fileName1 = file.path(output_location, paste("TL_data_",model_number,"_",fit_date,".csv",sep=""))
+  write.csv(myData,fileName1,na="")
+  fileName2 = file.path(output_location, paste("PS_data_",model_number,"_",fit_date,".csv",sep=""))
+  write.csv(mcmcData,fileName2)
+  fileName3 = file.path(output_location, paste("MI_data_",model_number,"_",fit_date,".csv",sep=""))
+  write.csv(model.info,fileName3)
+  
+  if(length(intersect(myData$allrxname,multi_arm_trials)) == 0) {print("WARNING: NO Multi-Arm Trials For this Analysis")}
+  
+  return(mylist)
+  
+}
+
+# # #############################################
+# # # Function run example. 
+# mod2 = trial_MR(data_location="C:/Users/wille/OneDrive/Desktop/Surrogate Endpoints/Tom Code Pipeline",
+#                 data_file="nt99a_ce_up_corrs_allacute_20220523.csv",
+#                 output_location="C:/Users/wille/OneDrive/Desktop/Surrogate Endpoints",
+#                 outcome="clinical effect",
+#                 independent_effects="chronic slope",
+#                 model_type="random",exclude_trial_names=c("AWARD-7","ACCORD(GLUC)","ACCORD(BP)","ACCORD(FIB)","Dapa0","PERL","CHARM-Alt",
+#                                                           "CHARM-Preserved","ACCOMPLISH (reverse)"),follow_up_GFR=2,
+#                 num.iter=1000,multi_arm_trials=c("IDNT(CCB)","IDNT(CNTRL)","AASK(CNTRL)","AASK(CCB)","ADOPT(Met)","ADOPT(Glyb)"),
+#                 multi_arm_corrs=c(0.408,0.5,0.5),model_number = 1,fit_date = "May-2022",num_chains=3,indep_var_name_est="beta31_beta32_est",
+#                 indep_var_name_se = "beta31_beta32_se",outcome_name_est = "loghr1_est",outcome_name_se = "loghr1_se",
+#                 cln_surr_corr_name = "beta3_ce_corr",indep_var_name_2_est=NA,indep_var_name_2_se=NA,surr_surr_corr_name=NA,
+#                 cln_surr_corr_name_2=NA,outcome_SE_cutoff=1000,sur_var_prior="inv_gamma(0.261,0.005)",error_var_prior="inv_gamma(0.261,0.000408)",beta_prior="uniform(-1.25,1.25)")
+# 
+# 
+# # #############################################
+# # # Another Function run example. 
+# mod2 = trial_MR(data_location="C:/Users/wille/OneDrive/Desktop/Surrogate Endpoints/Ben Surrogate Materials (relax exchange.)",
+#                 data_file="nt99a_ce_up_corrs_updated.csv",
+#                 output_location="C:/Users/wille/OneDrive/Desktop/Surrogate Endpoints",
+#                 outcome="clinical effect",
+#                 independent_effects=c("chronic slope","ACR - 6 months"),
+#                 model_type="random",
+#                 num.iter=500,multi_arm_trials=c("IDNT(CCB)","IDNT(CNTRL)","AASK(CNTRL)","AASK(CCB)"),
+#                 multi_arm_corrs=c(0.5,0.408),model_number = 2,fit_date = "aug25-2021",num_chains=1,indep_var_name_est="beta31_beta32_est",
+#                 indep_var_name_se = "beta31_beta32_se",outcome_name_est = "loghr1_est",outcome_name_se = "loghr1_se",
+#                 cln_surr_corr_name = "beta3_ce_corr",indep_var_name_2_est="loggmr6_est",indep_var_name_2_se="loggmr6_se",surr_surr_corr_name="beta3_up6_corr",
+#                 cln_surr_corr_name_2="up6_ce_corr")
+# 
+# 
+# mod2 = trial_MR(data_location="C:/Users/wille/OneDrive/Desktop/Surrogate Endpoints/Ben Surrogate Materials (relax exchange.)",
+#                 data_file="nt99a_ce_up_corrs_updated.csv",
+#                 output_location="C:/Users/wille/OneDrive/Desktop/Surrogate Endpoints",
+#                 outcome="clinical effect",
+#                 independent_effects=c("chronic slope","ACR - 6 months"),
+#                 model_type="random",
+#                 num.iter=500,multi_arm_trials=c(),
+#                 multi_arm_corrs=c(),model_number = 2,fit_date = "aug25-2021",num_chains=1,indep_var_name_est="beta31_beta32_est",
+#                 indep_var_name_se = "beta31_beta32_se",outcome_name_est = "loghr1_est",outcome_name_se = "loghr1_se",
+#                 cln_surr_corr_name = "beta3_ce_corr",indep_var_name_2_est="loggmr6_est",indep_var_name_2_se="loggmr6_se",surr_surr_corr_name="beta3_up6_corr",
+#                 cln_surr_corr_name_2="up6_ce_corr")
