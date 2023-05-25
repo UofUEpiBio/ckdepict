@@ -27,7 +27,7 @@ fdac2_tx_allendpts	fdac2_tx_slctendpts	fdac2_visits
 fdac2_visits_interim	upro_change9m	upro_change9m (Excel)
 
 # Step 1c: Data checks   
-a.	Step 2 outputs a summary of variables. Please check the values generated against the published results of your study to ensure at least the published variables are coded correctly.
+a.	Step 1b outputs a summary of variables. Please check the values generated against the published results of your study to ensure at least the published variables are coded correctly.
 b.	This is also an opportunity to check other variables and rerun analysis as needed. Negative values for variables indicating number of days, very high or very low values for lab parameters are some red flags to be aware of.
 c.	Another check performed by step 2 is if there are sufficient values for conducting change in albuminuria analysis. Please work with TuftsMC data manager to decide if the study is eligible for albuminuria analysis.
 d.	After this step, you should have datasets that have been deemed okay by you and TuftsMC data manager and are ready for analysis.
