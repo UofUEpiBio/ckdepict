@@ -1,1 +1,82 @@
+Run all codes in this folder sequentially. 
+Change the filepath at the beginning of the code.
+
+If you have more than one study in the dataset, please make the following changes in the code:
+
+Code 5:
+
+*%initialize_studies(1);
+%initialize_studies(2); *add this for as many studies as you have;
+
+ods listing close;
+options nonotes nomprint nosymbolgen nomlogic;
+*options notes mprint symbolgen mlogic;
+*ods listing;
+*%InitialModelOptions(_POM_=SS,_ACR_=NO,_CE_=NO,_Prop_=YES,_SP_threshold=15,_HESS_=YES);
+*%doall(1);
+
+%InitialModelOptions(_POM_=SS,_ACR_=NO,_CE_=NO,_Prop_=YES,_SP_threshold=15,_HESS_=YES);
+%doall(2); *add this for as many studies as you have;
+
+
+Code 6:
+
+*%zinitialize_studies(1);
+%zinitialize_studies(2); *add this for as many studies as you have;
+
+
+ods listing close;
+options nonotes nomprint nosymbolgen nomlogic;
+*options notes mprint symbolgen mlogic;
+*ods listing;
+*%InitialModelOptions(_POM_=SS,_ACR_=YES,_CE_=YES,_Prop_=YES,_SP_threshold=15,_HESS_=YES);
+*%doall(1);
+%InitialModelOptions(_POM_=SS,_ACR_=YES,_CE_=YES,_Prop_=YES,_SP_threshold=15,_HESS_=YES);
+%doall(2); *add this for as many studies as you have and change YS/NO accordingly;
+
+
+Code 7:
+
+*%zinitialize_studies(1);
+%zinitialize_studies(2); *add this for as many studies as you have;
+
+
+ods listing close;
+options nonotes nomprint nosymbolgen nomlogic;
+*options notes mprint symbolgen mlogic;
+*ods listing;
+*%InitialModelOptions(_POM_=SS,_ACR_=YES,_CE_=YES,_Prop_=YES,_SP_threshold=15,_HESS_=YES);
+*%doall(1);
+%InitialModelOptions(_POM_=SS,_ACR_=YES,_CE_=YES,_Prop_=YES,_SP_threshold=15,_HESS_=YES);
+%doall(2);  *add this for as many studies as you have and change YS/NO accordingly;
+
+
+Code 8:
+
+Change 
+%cs(1,cs_out); 
+to 
+%cs(2,cs_out); *change to as many studies as you have;
+
+Change 
+%pe(1,pe_out); 
+to 
+%pe(2,pe_out); *change to as many studies as you have;
+
+Change 
+%est(1,est_out); 
+to 
+%est(2,est_out); *change to as many studies as you have;
+
+Code 9:
+
+Change
+%corrs6(corr1,1,1,corrs6);  
+%corrs12(corr2,1,1,corrs12); 
+
+To
+
+%corrs6(corr1,1,2,corrs6); *change to as many studies as you have;
+%corrs12(corr2,1,2,corrs12); *change to as many studies as you have;
+
 
