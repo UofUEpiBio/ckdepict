@@ -26,6 +26,8 @@ b.	This is also an opportunity to check other variables and rerun analysis as ne
 c.	Another check performed by step 2 is if there are sufficient values for conducting change in albuminuria analysis. Please work with TuftsMC data manager to decide if the study is eligible for albuminuria analysis.
 d.	After this step, you should have datasets that have been deemed okay by you and TuftsMC data manager and are ready for analysis.
 
+# For steps 2 and 3 make subfolders in your directory as shown in the repository.
+
 # Step 2:	ACR (i.e. albuminuria) analysis - folder analysis_acr
 1.	Sequentially run codes under path1\analysis_acr\sasprograms.
 Please save the SAS logs under acr_exports for each program that you run so that we can go back and check them if we face issues during the meta-analysis.
