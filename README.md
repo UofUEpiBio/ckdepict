@@ -1,4 +1,5 @@
 **Overview**
+
 Kidney disease is a worldwide  public health problem, disproportionately affecting older people and lower and middle income countries, with major outcomes including kidney failure and cardiovascular disease. The CKD Epidemiology Collaboration (CKD-EPI) is a research group founded in 2003 and has interests in evaluation of surrogate endpoints for clinical trials in CKD (CKD-EPI CT) along with estimation and measurement of glomerular filtration rate (GFR). 
 
 The programs shown here were used to study the association between treatment effects on surrogate endpoints (slope of the GFR, and albuminuria) with treatment effects on clinical endpoints (kidney failure with replacement therapy), in order to validate the use of these surrogate endpoints in clinical trials of chronic kidney disease. Results from our latest analyses are presented in Inker, et al, Nature Medicine 2023 and Heerpspink, et al, Lancet Diabetes Endocrinol, 2019.
