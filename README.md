@@ -1,4 +1,13 @@
-# ckdepict
+Kidney disease is a worldwide  public health problem, disproportionately affecting older people and lower and middle income countries, with major outcomes including kidney failure and cardiovascular disease. The CKD Epidemiology Collaboration (CKD-EPI) is a research group with interests in evaluation of surrogate endpoints for clinical trials in CKD (CKD-EPI CT). 
+
+The programs shown here were used to study the association between treatment effects on surrogate endpoints (slope of the glomerular filtration rate or albuminuria) with treatment effects on clinical endpoints (kidney failure with replacement therapy), in order to validate the use of these surrogate endpoints in clinical trials of chronic kidney disease.
+
+The trial-level analysis requires two steps: intent-to-treat estimation of the treatment effects on the surrogate and clinical endpoints within each RCT followed by a meta-regression to relate the treatment effects on the surrogate and clinical endpoints across RCTs. The analytic approach for trial-level analyses was based on the causal association framework described in Joffe and Greene (1989) in which the validity of surrogate endpoints is evaluated based on the relationship between the average causal effect of the treatment on the surrogate endpoint and the average causal effect of the treatment on the clinical endpoint across a population of randomized trials which are viewed as similar to a new randomized trial in which conclusions concerning clinical benefit are to be based on the surrogate endpoint. This approach takes advantage of the fact that the average causal effects on the surrogate and clinical endpoints can be estimated with little bias within each randomized trial by applying intent-to-treat analyses. The approach is closely related to frameworks for trial-level analyses which have been developed by other authors (Daniels and Hughes 1997, Burzykowski et al 2005, Burzykowski and Buyse 2006).
+
+
+Below are the detailed steps for analyses:
+
+
 # Step 1: Data cleaning   
 # A) Steps to be done using researchers' own coding:
 a. The goal of this step is to create preliminary datasets to match the template provided in the Excel sheet “Datasets template”. Since each study is different we are unable to provide programs for getting to these preliminary datasets. Please use your own way of coding for deriving them. 
@@ -28,6 +37,8 @@ d.	After this step, you should have datasets that have been deemed okay by you a
 
 # For steps 2 and 3 make subfolders in your directory as shown in the repository.
 
+Here, we applied the mixed effects models to estimate the treatment effects on GFR slope or albuminuria within each study by treatment arm, with treatment effects expressed as differences in the mean GFR slopes between the treatment versus control groups in units of ml/min/1.73m2/year. We estimated treatment effects on the clinical endpoint by performing separate Cox proportional hazard regressions to estimate log hazard ratios for the treatment in each trial. We summarized the mean treatment effects on each individual endpoint using restricted maximum likelihood with study as a random effect (rma.uni function in R metafor package).
+
 # Step 2:	ACR (i.e. albuminuria) analysis - folder analysis_acr
 1.	Sequentially run codes under path1\analysis_acr\sasprograms.
 Please save the SAS logs under acr_exports for each program that you run so that we can go back and check them if we face issues during the meta-analysis.
@@ -41,8 +52,13 @@ Please save the SAS logs under acr_exports for each program that you run so that
 1. Using your own code, merge 'nt99a_ce_up_corrs_updated' file from each study (found in ...\Root\analysis_egfrslope\truncation_99\truncation_99_exports)
 2. This file is the main input file for the next steps.
 
-# Step 5: Trial-level analysis
+# Step 5: Trial-level analysis - Bayesian meta-regression
 Set up and run the R fucntion 'Surrogate_Meta_Regression_RCode_Pipeline_UpDate_02-09-23jm' in your own R code.
+
+We applied a trial-level Bayesian mixed effects meta-regression model to relate the treatment effects on the clinical endpoint to the treatment effects on GFR slope with study as the unit of analysis41,50. The model relates the treatment effects on the two endpoints after accounting for the standard deviations of the random errors in the estimated effects in each study and the correlation of these errors with each other. This approach takes advantage of the fact that the average causal effects on the surrogate and clinical endpoints can be estimated with little bias within each randomized trial by applying intent-to-treat analyses51-53. The model includes two stages, where the first stage relates the estimated treatment effects to the true latent treatment effects within each trial, and the second stage describes the relationships between the true latent treatment effects across the different trials. 
+
+The trial-level analysis will support GFR slope or albuminuria as a surrogate endpoint if the slope of the meta-regression relating the treatment effect on the clinical endpoint to the treatment effect on the designated GFR slope endpoint or albuminuria differs substantially from 0, the R2 and RMSE or the meta-regression indicates that the estimated treatment effect on the GFR slope endpoint can reliably predict the treatment effect on the clinical endpoint, and the intercept of the meta-regression line is close to 0, indicating that the absence of a treatment effect on the GFR slope endpoint is not systematically associated with a non-zero treatment effect on the clinical endpoint. 
 
 # Step 6: Application of results to future trials - predictions
 Set up and run the R function 'PPD-PPV_R_Script' in your own R code.
+In this program, we aim to apply the trial level meta-regression to a newly conducted randomized trial.
