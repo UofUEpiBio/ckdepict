@@ -1540,3 +1540,4 @@ trial_MR = function(data_location,data_file,output_location,model_number=1,
 #                 indep_var_name_se = "beta31_beta32_se",outcome_name_est = "loghr1_est",outcome_name_se = "loghr1_se",
 #                 cln_surr_corr_name = "beta3_ce_corr",indep_var_name_2_est="loggmr6_est",indep_var_name_2_se="loggmr6_se",surr_surr_corr_name="beta3_up6_corr",
 #                 cln_surr_corr_name_2="up6_ce_corr")
+
