@@ -1,6 +1,6 @@
 %macro datacreation(long,short,event,knot,truncation,window);
 data short;
- length new_id $24;
+ length new_id $50;
  set &short;
  ev_d2y=ev_d;
  if ev_d2y=1 and fu_d > 24 then ev_d2y=0;
