@@ -68,6 +68,15 @@ if allrx=86		then allrx_year="2018           ";
 if allrx=87		then allrx_year="2019           ";
 if allrx=88		then allrx_year="2020           ";
 if allrx=89		then allrx_year="2021           ";
+if allrx=90		then allrx_year="2019           ";
+if allrx=91		then allrx_year="2022           ";
+if allrx=92		then allrx_year="2019           ";
+if allrx=93		then allrx_year="2020           ";
+if allrx=94		then allrx_year="2008           ";
+if allrx=95		then allrx_year="1999           ";
+if allrx=96		then allrx_year="2020           ";
+if allrx=97		then allrx_year="2021           ";
+if allrx=98		then allrx_year="2022           ";
 if allrx=100	then allrx_year="2003,04,09     ";
 if allrx=101	then allrx_year="2004,05	    ";
 if allrx=102	then allrx_year="2003,06	    ";
@@ -89,6 +98,7 @@ if allrx=523 	then allrx_year="2009			";
 if allrx=524 	then allrx_year="2011			";
 if allrx=525 	then allrx_year="2020			";
 if allrx=526 	then allrx_year="2003			";
+if allrx=527 	then allrx_year="2019			";
 if allrx=528 	then allrx_year="2019			";
-
+if allrx=531 	then allrx_year="2018			";
 
