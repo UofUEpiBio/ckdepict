@@ -1,0 +1,466 @@
+********************************************************************;
+**   PROGRAM:  Program for Truncation Based Analyses.sas          **;
+**   WRITTEN:  SEP 23, 2022                                       **;
+**   UPDATED:  OCT 11, 2022                                       **;
+**   AUTHOR :  Edward Vonesh                                      **;
+**   PURPOSE:  This program provides the SAS code designed to     **;
+**             help select the studies to use for a truncation    **;
+**             based sensitivity analysis so as to determine what **;
+**             impact truncating follow-up at 2 or 3 years may    **;  
+**             have on the estimated chronic slopes and hence on  **; 
+**             how robust our meta-analysis is to shorter studies **;
+**   OUTPUT :  This program generates the following output:       **;
+**             1) an Excel spreadsheet with the study design      **;
+**                information on the total number of subjects per **;
+**                treatment group & the month and number of eGFR  **;
+**                measuremenets taken on the given month per Trt. **;
+**             2) an RTF document summarizing the total number of **;
+**                subjects (N), the total count of eGFR values    **;
+**                measured per subject & the number and proportion**;
+**                of subjects with X or more eGFR measurements    **;
+**                based on a target truncation of Y months with   **;
+**                an additional 3 months for miss-timed visits.   **;
+**                Table 1. 
+**                treatment group & the month and number of eGFR  **;
+**                measuremenets taken on the given month per Trt. **;
+********************************************************************;
+
+
+/*=======================================================
+                      MACRO HOP
+The HOP macro grabs the value of a specified variable in 
+an offset observation relative to the current observation 
+and assigns it to another variable. It is used within a 
+SAS data step, but it cannot be used in an expression. 
+Each invocation of the HOP macro can only grab one value 
+of a variable across observations and assign it to another
+variable within the current observation.
+AUTHOR: Leonid Batkhan on SAS Users, November 1, 2017 
+=========================================================
+	%HOP(d,x,y,j)
+	d – input dataset or data table name;
+	x – source variable name;
+	y – target variable name;
+	j – integer offset relative to the current observation. 
+        A negative value means a previous observation, 
+	    A positive value means a subsequent observation, 
+        A zero means the current observation. 
+    The parameter j value can be either integer constant 
+    or a numeric variable name. In the latter case that 
+    variable's value at the current observation will be 
+    used as the offset.
+========================================================*/
+%macro hop(d,x,y,j);
+	_p_ = _n_ + &j;
+	if (1 le _p_ le _o_) then set &d(keep=&x rename=(&x=&y)) point=_p_ nobs=_o_;
+%mend hop;
+/*======================================================== 
+Note: The HOP macro is used to identify studies that meet  
+      the requirement of a minimum number of eGFR values
+      and is called later under the macro %SELECT_Studies.
+========================================================*/ 
+
+
+
+%let path1=d:\userdata\Shared\CKD_Endpts\CKD-EPI CT\Data\TRIALNAME;
+%let path2=d:\userdata\Shared\CKD_Endpts\CKD-EPI CT\0_Master_SAS_R_programs\1 TxtEffects;
+
+options validvarname=v7 nodate center nonumber replace xsync noxwait nofmterr ls=96 mautosource sasautos=("&path2\macros");
+
+libname Master  "&path1\analysis_sets\all\datasets";
+libname Exports "&path1\analysis_sets\all\Exports";
+
+/*============================================================================
+                       MACRO TRUNC_Studies 
+ This macro summarizes the number and timimg of observations for each 
+ study which one can use to identify and select studies to be included in a
+ truncation analysis to determine if tuncated follow-up yields chronic 
+ slope estimates consistent with the full follow-up analysis as part of 
+ an overall sesnitivity analysis. 
+ KEY: Truncation= -defines the allowable months of follow-up for any given
+                   trial. The default value is 24 months for a two year study
+           Extra= -defines adddional time for miss-timed visits. The
+                   default value is 3 months.  
+       MinVisits= -defines the minimum number of vists that occur after 
+                   three (3) months. The default value is 4 visits 
+        ExcelOut= -defines an Excel spreadsheet filename. If one decides to 
+                   run several versions of this macro with different options
+                   for Truncation, Extra and MinVisits then make sure to 
+                   change the name of ExcelOut (I suggest adding new numbers to
+                   the end of StudyDesign, eg. StudyDesign2, StudyDesign3,...). 
+=============================================================================*/
+%macro TRUNC_Studies(Truncation=24, Extra=3, MinVisits=4, ExcelOut=StudyDesign1);
+data Studies;
+	 set Master.studies;
+	 drop Trt;
+run;
+data allrxdata11;
+	 set exports.allrxdata;
+	 Studyname=allrxname;
+run;
+proc sort data=allrxdata11;
+ by allrx;
+run;
+proc sort data=Studies out=Studies_allrx(keep=study allrx) nodupkey;
+ by allrx;
+run;
+data allrxdata1;
+ merge allrxdata11 Studies_allrx(in=in1);
+ by allrx;
+ if in1;
+run;
+data allrxdata;
+	 set exports.allrxdata;
+	 Studyname=allrxname;
+	 keep allrx Studyname;
+run;
+proc sort data=Studies;
+ by allrx;
+run;
+proc sort data=allrxdata;
+ by allrx;
+run;
+data Studies;
+ merge Studies allrxdata;
+ by allrx;
+run;
+data Studies;
+ set Studies;
+	 ** b_CKDegfr_Mean = mean baseline eGFR;
+	 ** b_CKDegfr = fu_CKDegfr at baseline - b_CKDegfr_Mean = centered baseline eGFR;
+	 ** fu_CKDegfr is the eGFR at a planned visit (month) but is not centered;
+	 if TrtID=1 then Trt='Control';
+	 if TrtID=2 then Trt='Treated';
+	 Truncation=&Truncation;
+	 Extra=&Extra;
+	 MaxMonth =Truncation + Extra;
+	 MinVisits=&MinVisits;
+	run;
+	proc sort data=Studies;
+	 by Study Studyname Trt Subject Month;
+	run;
+	data Studies;
+	 set studies;
+	 by Study Studyname Trt Subject Month;
+	 if first.subject then Visit=0;
+	 Visit+1;
+	run;
+	proc sort data=Studies;
+	 by Study Studyname Trt Subject Visit Month;
+	run;
+	data Studies;
+	 set Studies;
+	 by Study Studyname Trt Subject Visit Month;
+	 MonthOfVisit = round(Month, 1);
+	 keep Study Studyname Trt TrtID Subject Visit Month MonthOfVisit MaxMonth Extra 
+	      fu_CKDegfr b_CKDegfr_Mean b_CKDegfr ev_dx fu_dx; 
+	run;
+	/* Create Dataset NumSubjects to be merged with TRUNC.StudyCounts below */
+	proc means data=Studies nway noprint n;
+	 where Visit=1;
+	 class Study Trt;
+	 id Studyname;
+	 var fu_CKDegfr;
+	 output out=NumSubjects n=TotalSubjects;
+	run;
+	data NumSubjects;
+	 set NumSubjects;
+	 keep Study Studyname Trt TotalSubjects;
+	run;
+	/* Create DummayStudies dataset to be merged with TRUNC.Studies */
+	data DummyStudies;
+	 set Studies;
+	 by Study Studyname Trt Subject Visit Month;
+	 if first.Trt;
+	 keep Study Studyname Trt MaxMonth;
+	run;
+	/* Default value for MaxMonth is set at 27 to allow miss-timed visits */
+	data DummyStudies;
+	 set DummyStudies;
+	 by Study Studyname Trt;
+	 do Month=4 to MaxMonth by 1;
+	  _Count_=0;
+	  output;
+	 end;
+	run;
+	data DummyStudies;
+	 set DummyStudies;
+	run;
+	/* Compute number of subjects per Trt per Month */ 
+	ods listing close;
+	ods select Frequencies;
+	ods output Frequencies=FreqCounts;
+	proc univariate data=Studies freq;
+	 where 3<MonthOfVisit<=MaxMonth and fu_CKDegfr>.;
+	 by Study Studyname;
+	 class Trt;
+	 var MonthOfVisit;
+	run;
+	data FreqCounts;
+	 set FreqCounts;
+	 Month=Value;
+	run;
+	ods listing;
+	proc sort data=DummyStudies;
+	 by Study Month Trt; 
+	run;
+	proc sort data=FreqCounts;
+	 by Study Month Trt; 
+	run;
+	data OverallStudies;
+	 merge FreqCounts(in=a) DummyStudies(in=b);
+	 by Study Month Trt; 
+	run;
+	proc sort data=OverallStudies;
+	 by Study Studyname Trt;
+	run;
+	data OverallStudies;
+	 set OverallStudies;
+	 if Count=. then Count=_Count_;
+	 keep Study Studyname Trt Month Count;
+	run;
+	proc transpose data=OverallStudies out=StudyCounts prefix=Month_ ;
+	 by Study Studyname Trt; 
+	 id Month;
+	 var Count; 
+	run;
+	proc sort data=StudyCounts;
+	 by Study Studyname Trt;
+	run;
+	proc sort data=NumSubjects;
+	 by Study Studyname Trt;
+	run;
+	data StudyCounts0; 
+	 merge NumSubjects(in=a) StudyCounts(in=b);
+	 by Study Studyname Trt;
+	 if a and b;
+	 drop _NAME_ _LABEL_;
+	run;
+	proc sort data=StudyCounts0;
+	 by study;
+	run;
+	proc sort data=allrxdata1;
+	 by study;
+	run;
+	data StudyCounts;
+	 merge allrxdata1 StudyCounts0(in=in1);
+	 by study;
+	 if in1;
+	run;
+	proc sort data=StudyCounts;
+	 by Study Studyname Trt;
+	run;
+	proc export data=StudyCounts
+	 outfile="&path1\analysis_sets\all\Exports\&ExcelOut..csv" 
+     dbms=csv replace;
+	run;
+%mend;
+/*============================================================================
+                       MACRO SELECT_Studies 
+ This macro summarizes the number and timimg of observations for each 
+ study and uses this information to select studies to be included in a
+ truncation analysis to determine if tuncated follow-up yields chronic 
+ slope estimates consistent with the full follow-up analysis as part of 
+ an overall sesnitivity analysis. 
+ KEY: Truncation= -defines the allowable months of follow-up for any given
+                   trial. The default value is Truncation=24 months 
+           Extra= -defines adddional time for miss-timed visits. The
+                   default value is Extra=3 months.  
+         Min_OBS= -defines the minimum number of eGFR observations required 
+                   to be taken between 3< Month < Truncation + Extra in order
+                   for a study to be considered for inclusion in a truncation
+                   based sensitivity analysis. The default value is Min_OBS=4. 
+=============================================================================*/
+%macro SELECT_Studies(Truncation=24, Extra=3, Min_OBS=4, ExcelOut=Summary_counts);
+	/*=======================================================
+	  Step 1: Define the truncation period based on a target      
+	          followup (e.g., 24 months) plus a small amount
+              of time (months) to protect against miss-timed 
+              vsists. 
+	========================================================*/
+data SelectStudies;
+	 set Master.studies;
+	 drop Trt;
+run;
+data allrxdata11;
+	 set exports.allrxdata;
+	 Studyname=allrxname;
+run;
+proc sort data=allrxdata11;
+ by allrx;
+run;
+proc sort data=SelectStudies out=SelectStudies_allrx(keep=study allrx) nodupkey;
+ by allrx;
+run;
+data allrxdata1;
+ merge allrxdata11 SelectStudies_allrx(in=in1);
+ by allrx;
+ if in1;
+run;
+data allrxdata;
+	 set exports.allrxdata;
+	 Studyname=allrxname;
+	 keep allrx Studyname;
+run;
+proc sort data=SelectStudies;
+ by allrx;
+run;
+proc sort data=allrxdata;
+ by allrx;
+run;
+data SelectStudies;
+ merge SelectStudies allrxdata;
+  by allrx;
+run;
+
+	data SelectStudies;
+     /* dat.studies is the overall database EFV had for the 2018 Wokshop */ 
+     set SelectStudies; 
+	/* Restrict to first 3 studies to examine output, remove * to execute */
+*	 if Study<4;
+	 if TrtID=1 then Trt='Control';
+	 if TrtID=2 then Trt='Treated';
+	 Truncation=&Truncation;
+	 Extra=&Extra;
+	 MaxMonth = Truncation + Extra;
+     ** Notes to EFV:;  
+	 ** fu_CKDegfr = eGFR; 
+	 ** b_CKDegfr_Mean = mean baseline eGFR;
+	 ** b_CKDegfr = fu_CKDegfr at baseline - b_CKDegfr_Mean = centered baseline eGFR;
+	run;
+
+	proc sort data=SelectStudies;
+	 by Study Studyname Trt Subject Month;
+	run;
+	/* Define the boundaries of eligible studies */
+	data SelectStudies;
+	 set SelectStudies;
+	 by Study Studyname Trt Subject Month;
+	 where 3<Month<=MaxMonth and fu_CKDegfr>.;
+	run;
+
+	proc means data=SelectStudies noprint n;
+	 class Study Trt Subject;
+	 id Studyname;
+	 var fu_CKDegfr;
+	 output out=counts n=Measurements;
+	run;
+	/* An optional partial print statement, remove * to print */ 
+	data counts;
+ 	 set counts;
+	 if _TYPE_=7;
+	run; 
+	data counts;
+ 	 set counts;
+	 if Measurements>= &Min_OBS     then OBS_&Min_OBS=1;
+	 else if Measurements< &Min_OBS then OBS_&Min_OBS=0;
+	run; 
+
+	proc means data=counts nonobs nway n sum mean min q1 median q3 max maxdec=2; 
+	 class Study Studyname Trt;
+	 id Studyname;
+	 var Measurements;
+	 label Studyname='Study Name' OBS_4='4 or more'; 
+	 output out=summary_counts1 n=N sum=Total mean=Mean min=Min q1=q1 median=Median q3=q3 max=Max;
+	 title1 "Appendix 1a - List of all studies with summary statistics on number of subjet and number of eGFR measurement";
+	 title3 "based on a &Truncation month target truncation with an additional &Extra months for miss-timed visits.";
+ 	run;
+	proc means data=counts nonobs nway n sum mean min q1 median q3 max maxdec=2; 
+	 class Study Studyname Trt;
+	 id Studyname;
+	 var OBS_4;
+	 label Studyname='Study Name' OBS_4='>=4 eGFR Measuresments '; 
+	 output out=summary_counts2 n=N sum=Total mean=Mean;
+	 title1 "Appendix 1b - List of all studies with summary statistics on number of subjects with >= &Min_OBS eGFR measurements";
+ 	run;
+
+	data summary_counts;
+	 set summary_counts1(in=a) summary_counts2(in=b);
+	 if a then do; Outcome=1; end;
+	 if b then do; Outcome=2; end;
+	 Stats="Statistics";
+	run;
+	proc sort data=summary_counts;
+	 by Study Studyname Trt Outcome;
+	run;
+	data summary_counts;
+ 	 set summary_counts;
+ 	 by Study Studyname Trt Outcome;
+	run;
+	data summary_counts;
+ 	 set summary_counts;
+ 	 by Study Studyname Trt Outcome;
+	 if Outcome=1 then do;
+	  	%hop(summary_counts, Mean, _Mean_, 0);
+	 end;
+	 if Outcome=2 then do;
+	  	%hop(summary_counts, Mean, _Mean_, -1);
+	 end;
+	run;
+
+	proc format;                            
+     value OutFmt 1='No. of Measurements' 2='Subjects with >= 4 Obs.';
+	run;
+	
+	data summary_counts;
+	 set summary_counts;
+	 ntotal=total;
+	 if outcome=1 then ntotal=0;
+	run;
+	
+	proc sql noprint;
+    create table summary_counts as
+    select *, sum(ntotal) as Total_sum
+    from summary_counts
+    group by study;
+    quit;
+
+	proc sort data=summary_counts;
+	 by Study Studyname Trt Outcome;
+	run;
+
+	data summary_counts_keeper;
+	 set summary_counts;
+	 by Study Studyname Trt Outcome;
+	 if _mean_>=&Min_OBS;
+	run;
+
+	data summary_counts0;
+	 set summary_counts;
+	 cutpoint=&Min_OBS;
+	 study_include=0;
+	 if _mean_>=&Min_OBS then study_include=1;
+	  else if _mean_>=&Min_OBS-1 and Total_sum>=100 then study_include=1;
+	      if outcome=1 then stats="Mean";
+	 else if outcome=2 then stats="Prop";
+	 drop _type_ _freq_ outcome ntotal;
+	run;
+
+	proc sort data=summary_counts0;
+	 by study;
+	run;
+	proc sort data=allrxdata1;
+	 by study;
+	run;
+	data Summary_counts1;
+	 merge allrxdata1 summary_counts0(in=in1);
+	 by study;
+	 if in1;
+	run;
+	proc sort data=Summary_counts1;
+	 by Study Studyname Trt stats;
+	run;
+
+	proc export data=Summary_counts1
+	 outfile="&path1\analysis_sets\all\Exports\&ExcelOut..csv" 
+     dbms=csv replace;
+	run;
+
+%mend Select_Studies;
+%options_off;
+%TRUNC_Studies(Truncation=24,Extra=3,ExcelOut=StudyDesign_24m);
+%Select_Studies(Truncation=24,Extra=3,Min_OBS=4,ExcelOut=Summary_counts_24m);
+%TRUNC_Studies(Truncation=18,Extra=3,ExcelOut=StudyDesign_18m);
+%Select_Studies(Truncation=18,Extra=3,Min_OBS=4,ExcelOut=Summary_counts_18m);
+%options_on;
+
