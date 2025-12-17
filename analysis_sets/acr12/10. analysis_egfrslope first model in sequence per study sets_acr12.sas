@@ -1,0 +1,173 @@
+%let path1=d:\userdata\Shared\CKD_Endpts\CKD-EPI CT\Data\TRIALNAME;
+%let path2=d:\userdata\Shared\CKD_Endpts\CKD-EPI CT\0_Master_SAS_R_programs\1 TxtEffects;
+
+libname Master "&path1";
+libname SASdata  "&path1\analysis_sets\acr12\datasets";
+libname results "&path1\analysis_sets\acr12\models\results";
+libname temp "&path1\analysis_sets\acr12\models\temp";
+libname temp2 "&path1\analysis_sets\acr12\models\temp2";
+
+ 
+options validvarname=v7 nodate center nonumber replace xsync noxwait nofmterr ls=96 mautosource 
+sasautos=("&path2\macros");
+
+%include "&path2\macros\Macros_JointModel_EFV27JAN2023.sas";
+
+%let N_trt=2;
+%let N_Trt_1=1;
+
+ %let N_event=9;        *!!!!!!!___modify the count of endpoints____!!!!!!!!;
+ %macro declearNIntervals;
+  %do ki = 1 %to &N_event; %global NIntervals&ki include&ki;  %end;
+ %mend;
+ %declearNIntervals;
+ %global  b_CKDegfr_Mean;
+ %global  ACR;          *!!!!!!___New macro variable option to include or exclude ACR modeling;   
+ %global  bGFR; 
+ %global  Log_ACR;
+ %global  Acute_GFR;
+ %global  CE;           *!!!!!!___New macro variable option to include or exclude clinical event (CE) modeling;       
+ %global  Proportional;
+ %global  BOUNDS;       *!!!!!!___New macro variable option to set bounds on kappa estimation;
+ %global  POM;
+ %global  SP_threshold; *!!!!!!___EFV: This may be necessary to allow us to change this within macro Run_Model;  
+ %global  SP;
+ %global  HESS;  
+ %global  TRUNC;        *!!!!!!___New macro variable option to allow for a truncated analysis; 
+ %global  TRUNCATE;     *!!!!!!___New macro variable option that defined the length of truncation; 
+ %global  QUAD;         *!!!!!!___New macro variable option to include or exclude fixed-effects quadratic 
+                                  regression coefficients in the eGFR model to investigate possible nonlinearity; 
+ %global  PSI21;        *!!!!!!___EFV: This global macro variable is only defined in DOALL as a last resort eGFR
+                                  model in combination with the macro variable HESS. The default is PSI21=YES so
+                                  that the parameter psi21 is included in the random effects covariance structure. 
+                                  However, one can set PSI21=NO which will force PSI21=0 for any given model 
+                                  one wishes to run;
+ %let ACR=YES;          *!!!!!!___set YES/NO to include (YES) or exclude (NO) ACR in the joint model;
+ %let bGFR=YES;         *!!!!!!___set YES/NO to include (YES) or exclude (NO) bGFR in the joint model;
+ %let Log_ACR=YES;      *!!!!!!___set YES/NO to include (YES) or exclude (NO) Log_ACR in the joint model;
+ %let Acute_GFR=NO;    *!!!!!!___set YES/NO to include (YES) or exclude (NO) Aute_GFR in the joint model;
+ %let CE=YES;           *!!!!!!___set YES/NO to include (YES) or exclude (NO) clinical events in the joint model;
+ 
+ %let Proportional=YES; *!!!!!!___set YES/NO to allow (estimated kappa) or not allow (kappa=0) for different   
+                                  random slope effect variances for the two treatment groups;
+ %let BOUNDS=YES;       *!!!!!!___set YES/NO to BOUNDS=YES so as to allow for a constrained estimate of kappa>-1.0    
+                                  to ensure that one can then execute the ESTIMATE log(1+kappa) statement or set 
+                                  the option to BOUNDS=NO so as to allow kappa to be freely estimated as was done  
+                                  in the original calls to the program but which can result in a termination of the
+                                  program for a study when the options for that study (e.g., truncation) result
+                                  in an estimate of kappa<-1.0 causing termination when the ESTIMATE log(1+kappa)
+                                  statement is called from within the NLMIXED program; 
+ %let POM=SS;           *!!!!!!___set SS/PA/NO to allow or not allow power of mean (POM) residual variance;
+ %let SP_threshold=15;  *!!!!!!___set threshold for SP model, if the total count of ev_dx event is less than this 
+                                  threshold, then only the POM model will be run, otherwise SP model will be run;
+ %let HESS=YES;         *!!!!!!___set HESS=YES if you want to allow automatic switch from SS-POM to PA-POM when 
+                                  the Hessian matrix is a problem under SS-POM or if you want to further allow 
+                                  automatic switch from PA-POM to NO-POM when Hessian is a problem under PA-POM, 
+                                  or set HESS=NO if you want to run all three POM options and compare results
+                                  using macros Compare_POM and Summary - see end of program for example;
+ %let PSI21=YES;        *!!!!!!___set YES/NO to include (YES) or exclude (NO) the parameter psi21 from the random 
+                                  effects covariamce structue;   
+ %let QUAD=NO ;         *!!!!!!___set YES/NO to include (YES) or exclude (NO) fixed-effects quadratic regression 
+                                  parameters as a means for testing if there is any nonlinearity in chronic phase;   
+ %let TRUNC=NO;         *!!!!!!___set YES/NO to use a truncated eGFR follow-up time dataset (YES) or to use the
+                                  original dataset without any truncation (NO).;   
+ %let TRUNCATE=36;      *!!!!!!___set to 36, 24 or 18 for a truncated analsyis at 36, 24 and 18 months (default=36);   
+ %let knot=3;           *!!!!!!___set knot=3 to be fixed for the simplified one-slope mixed-effects model;  
+
+/** Get baseline UP **/
+data fda2_allrx;
+ set SASdata.fda2_allrx;
+ if delupro12=. then delete;
+ keep new_id allrx study_num;
+run;
+data ddshort;
+ set Master.fdac2_tx_allendpts;
+ if b_ckdegfr=. then delete;
+run;
+data ddlong;
+ set Master.fdac2_visits;
+ if visit_time=. or visit_time <= 0 or fu_ckdegfr=. then delete;
+run;
+proc sort data=ddshort out=ddshort_unique(keep=new_id study_num) nodupkey;
+ by new_id study_num;
+run;
+proc sort data=ddlong out=ddlong_unique(keep=new_id study_num) nodupkey;
+ by new_id study_num;
+run;
+data unique_ids;
+ merge ddshort_unique(in=in1) ddlong_unique(in=in2);
+ by new_id study_num;
+run;
+proc sort data=ddshort;
+ by new_id study_num;
+run;
+proc sort data=unique_ids;
+ by new_id study_num;
+run;
+proc sort data=fda2_allrx;
+ by new_id study_num;
+run;
+data dshort;
+ merge ddshort(in=in1) unique_ids(in=in2) fda2_allrx(in=in3);
+ by new_id study_num;
+ if in1 and in2 and in3;
+run;
+data base;
+ set dshort;
+ %include "&path2\macros\zupro.sas";
+ zzupro=zupro/1000;
+ keep allrx zzupro;
+run;
+data base1;
+ set base;
+ rename allrx=study_num;
+run;
+proc means data=base1 median;
+ var zzupro;
+ class study_num;
+ ods output summary=base_up(drop=nobs);
+run;
+proc sort data=base_up;
+ by study_num;
+run;
+data studies;
+ set SASdata.studies;
+run;
+proc tabulate data=studies out=mean_bsl;
+ class study_num;
+ var b_CKDegfr;
+ table b_CKDegfr*mean, study_num;
+ where visit_time=0;
+run;
+data mean_bsl;
+set mean_bsl;
+drop _TYPE_--_TABLE_;
+run;
+proc sort data=studies; 
+ by study_num;
+run;
+proc sort data=mean_bsl; 
+ by study_num;
+run;
+data studies;
+ merge studies mean_bsl;
+ by study_num;
+run;
+data studies;
+ set studies;
+ Month=visit_time;
+ lg_b_CKDegfr=log(b_CKDegfr); 
+ b_CKDegfr=b_CKDegfr-b_CKDegfr_Mean;
+ TrtID=T_assign+1;
+run;
+proc sort data=studies; 
+ by study subject Month; 
+run;
+%zinitialize_studies(1);
+
+%options_off;
+%zInitialModelOptions(_POM_=SS,_ACR_=NO,_CE_=NO,_Prop_=YES,_BOUNDS_=NO,_SP_threshold=15,_PSI21_=YES, _HESS_=YES,_bGFR_=NO,
+_Log_ACR_=NO,_Acute_GFR_=NO,_QUAD_=NO,_TRUNC_=NO,_TRUNCATE_=27);
+%doall(1);
+
+
