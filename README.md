@@ -46,30 +46,48 @@ b.	This is also an opportunity to check other variables and rerun analysis as ne
 c.	Another check performed by step 2 is if there are sufficient values for conducting change in albuminuria analysis. Please work with TuftsMC data manager to decide if the study is eligible for albuminuria analysis.
 d.	After this step, you should have datasets that have been deemed okay by you and TuftsMC data manager and are ready for analysis.
 
-# For steps 2 and 3 make subfolders in your directory as shown in the repository.
+# Step 2: Treatment effect estimation and computing correlations between different treatment effects
 
-Here, we applied the mixed effects models to estimate the treatment effects on GFR slope or albuminuria within each study by treatment arm, with treatment effects expressed as differences in the mean GFR slopes between the treatment versus control groups in units of ml/min/1.73m2/year. We estimated treatment effects on the clinical endpoint by performing separate Cox proportional hazard regressions to estimate log hazard ratios for the treatment in each trial. We summarized the mean treatment effects on each individual endpoint using restricted maximum likelihood with study as a random effect (rma.uni function in R metafor package).
+Please refer to the analysis_sets folder. Here, we applied the mixed effects models to estimate the treatment effects on GFR slope or albuminuria within each study by treatment arm, with treatment effects expressed as differences in the mean GFR slopes between the treatment versus control groups in units of ml/min/1.73m2/year. We estimated treatment effects on the clinical endpoint by performing separate Cox proportional hazard regressions to estimate log hazard ratios for the treatment in each trial. We summarized the mean treatment effects on each individual endpoint using restricted maximum likelihood with study as a random effect (rma.uni function in R metafor package).
 
-# Step 2:	ACR (i.e. albuminuria) analysis - folder analysis_acr
-1.	Sequentially run codes under path1\analysis_acr\sasprograms.
-Please save the SAS logs under acr_exports for each program that you run so that we can go back and check them if we face issues during the meta-analysis.
+For steps 2 onwards, make subfolders in your directory as shown in the repository.
+The different subfolders under analysis_sets are:
+1. acr6 and acr12 -- ACR (i.e. albuminuria) analysis
+2. all -- GFR slope analysis using the full follow-up period
+3. trunc18 and trunc24 -- GFR slope analysis using truncated follow-up periods
+4. quad -- GFR slope analysis using quadratic method
+   
+Sequentially run codes displayed under sasprograms subfolder under these analysis_sets. 
+Please save the SAS logs under exports for each program that you run so that we can go back and check them if we face issues during the meta-analysis.
 
-# Step 3: GFR slope analysis  - folder analysis_egfrslope/truncation_99
-1.	Sequentially run the codes under path1\analysis_egfrslope\truncation_99\sasprograms. Please save the SAS logs under truncation_99_exports for each program that you run so that we can go back and check if we face issues during the meta-analysis.
-2.	Sequentially run the codes under path1\analysis_egfrslope\truncation_99_acr30\sasprograms. Please save the SAS logs under truncation_99_acr30_exports for each program that you run so that we can go back and check them if we face issues during the meta-analysis.
-3. ACR>100 or ACR>30 analyses: 1. Repeat Steps 3 using the right subset of data.
+# Step 3: Merging summary data from each study in your database
+1. Using your own code, merge 'nt99a' file from each study (found in the exports subfolder under analysis_sets\all or acr6 or acr12 etc.)
+2. This is the pooled trial-level input file for the next steps.
 
-# Step 4: Merging summary data from each study in your database
-1. Using your own code, merge 'nt99a_ce_up_corrs_updated' file from each study (found in ...\Root\analysis_egfrslope\truncation_99\truncation_99_exports)
-2. This file is the main input file for the next steps.
-
-# Step 5: Trial-level analysis - Bayesian meta-regression
-Set up and run the R fucntion 'Surrogate_Meta_Regression_RCode_Pipeline_UpDate_02-09-23jm' in your own R code.
+# Step 4: Trial-level analysis - Bayesian meta-regression
 
 We applied a trial-level Bayesian mixed effects meta-regression model to relate the treatment effects on the clinical endpoint to the treatment effects on GFR slope with study as the unit of analysis41,50. The model relates the treatment effects on the two endpoints after accounting for the standard deviations of the random errors in the estimated effects in each study and the correlation of these errors with each other. This approach takes advantage of the fact that the average causal effects on the surrogate and clinical endpoints can be estimated with little bias within each randomized trial by applying intent-to-treat analyses51-53. The model includes two stages, where the first stage relates the estimated treatment effects to the true latent treatment effects within each trial, and the second stage describes the relationships between the true latent treatment effects across the different trials. 
 
 The trial-level analysis will support GFR slope or albuminuria as a surrogate endpoint if the slope of the meta-regression relating the treatment effect on the clinical endpoint to the treatment effect on the designated GFR slope endpoint or albuminuria differs substantially from 0, the R2 and RMSE or the meta-regression indicates that the estimated treatment effect on the GFR slope endpoint can reliably predict the treatment effect on the clinical endpoint, and the intercept of the meta-regression line is close to 0, indicating that the absence of a treatment effect on the GFR slope endpoint is not systematically associated with a non-zero treatment effect on the clinical endpoint. 
 
-# Step 6: Application of results to future trials - predictions
-Set up and run the R function 'PPD-PPV_R_Script' in your own R code.
-In this program, we aim to apply the trial level meta-regression to a newly conducted randomized trial.
+Set up and run the R function 'Surrogate_Meta_Regression_RCode_Pipeline_20250529.R'. Instructions/sample code for calling the function are provided at the end of the function.
+
+# Step 5: Application of results to future trials - predictions
+
+Here we apply the trial level meta-regression to a newly conducted randomized trial.
+
+Set up and run the R function 'ppdppv_newmethod_2023.07.24.r'.
+
+
+//Step 2 as per an older method which was used until 2025//
+# Step 2:	Treatment effect estimation
+
+a) ACR (i.e. albuminuria) analysis - folder analysis_acr
+1.	Sequentially run codes under path1\analysis_acr\sasprograms.
+Please save the SAS logs under acr_exports for each program that you run so that we can go back and check them if we face issues during the meta-analysis.
+
+b) GFR slope analysis  - folder analysis_egfrslope/truncation_99
+1.	Sequentially run the codes under path1\analysis_egfrslope\truncation_99\sasprograms. Please save the SAS logs under truncation_99_exports for each program that you run so that we can go back and check if we face issues during the meta-analysis.
+2.	Sequentially run the codes under path1\analysis_egfrslope\truncation_99_acr30\sasprograms. Please save the SAS logs under truncation_99_acr30_exports for each program that you run so that we can go back and check them if we face issues during the meta-analysis.
+3. ACR>100 or ACR>30 analyses: 1. Repeat Steps 3 using the right subset of data.
+
