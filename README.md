@@ -20,7 +20,7 @@ The analytic approach is based on the causal association framework in which the 
 (Note: The  numbers below do not follow the bullet numbers in the seven steps in the overview.)
 
 # Step 1: Data cleaning   
-# A) Steps to be done using researchers' own coding:
+# A) Steps to be done using researchers' own SAS/R/other codes:
 a. The goal of this step is to create preliminary datasets to match the template provided in the Excel sheet “Datasets template”. Since each study is different we are unable to provide programs for getting to these preliminary datasets. Please use your own way of coding for deriving them. 
 The three datasets you should have at the end of this step are: Baseline,	Scr,	UP
 The Excel template has tabs corresponding to each of these datasets, with the first three rows providing the variable name to be used and the definition or calculation method for each variable and the rows after that showing examples. 
@@ -33,7 +33,7 @@ d.	Please fill out the relevant cells in the tab “At a glance” to document y
 e.	Save the datasets in the folder “2 Clean data”.
 
 # B) Steps using code in the folder 1_data_cleaning 
-a.	Once you have the above 3 datasets, the rest of the cleaning can be done using the SAS program “Steps code”. 
+a.	Once you have the above 3 datasets, the rest of the data management can be done using the SAS program “Steps code”. 
 b.	To run this code, assign the file path of the Root directory to path1.
 c.	Assign the location of your recently cleaned data to the library ‘clean_data’.
 d.	Press control + H to replace “newstudy” with a 6 character name for your study.
