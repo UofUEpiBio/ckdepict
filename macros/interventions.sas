@@ -22,6 +22,8 @@
   else if intervention=23 then intervention_fmt="PPAR agonist                 ";  
   else if intervention=24 then intervention_fmt="Endothelin rec. antagonist   ";
   else if intervention=25 then intervention_fmt="Antiplatelet			      ";
+  else if intervention=26 then intervention_fmt="Angiotensin rec/neprilysin in";
+  else if intervention=27 then intervention_fmt="Cardiac Myosin Activatation  ";
 
        if intervention=1  then intervention_abrev="RAS   ";
   else if intervention=2  then intervention_abrev="RvC   ";
@@ -46,3 +48,5 @@
   else if intervention=23 then intervention_abrev="PPARA ";  
   else if intervention=24 then intervention_abrev="ERA   "; 
   else if intervention=25 then intervention_abrev="AP    "; 
+  else if intervention=26 then intervention_abrev="ARNI  "; 
+  else if intervention=27 then intervention_abrev="CMyAct"; 
