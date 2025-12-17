@@ -58,6 +58,16 @@ if study_num=86 then study_year=2018;
 if study_num=87 then study_year=2019;
 if study_num=88 then study_year=2020;
 if study_num=89 then study_year=2021;
+if study_num=90 then study_year=2019;
+if study_num=91 then study_year=2022;
+if study_num=92 then study_year=2019;
+if study_num=93 then study_year=2020;
+if study_num=94 then study_year=2008;
+if study_num=95 then study_year=1999;
+if study_num=96 then study_year=2020;
+if study_num=97 then study_year=2021;
+if study_num=98 then study_year=2022;
+if study_num=99 then study_year=2014;
 if study_num=500 then study_year=2010;
 if study_num=505 then study_year=2015;
 if study_num=506 then study_year=2014;
@@ -74,7 +84,8 @@ if study_num=523 then study_year=2009;
 if study_num=524 then study_year=2011;
 if study_num=525 then study_year=2020;
 if study_num=526 then study_year=2003;
-
+if study_num=527 then study_year=2019;
+if study_num=531 then study_year=2018;
 
 
 
