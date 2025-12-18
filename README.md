@@ -59,7 +59,7 @@ The different subfolders under analysis_sets are:
 3. trunc18 and trunc24 -- GFR slope analysis using truncated follow-up periods
 4. quad -- GFR slope analysis using quadratic method
    
-Sequentially run codes displayed under sasprograms subfolder under these analysis_sets. 
+Sequentially run codes displayed under sasprograms subfolder under these analysis_sets. All macros called in the SAS programs are in a folder called "macros".
 Please save the SAS logs under exports for each program that you run so that we can go back and check them if we face issues during the meta-analysis.
 
 # Step 3: Merging summary data from each study in your database
