@@ -81,7 +81,7 @@ Here we apply the trial level meta-regression to a newly conducted randomized tr
 Set up and run the R function 'ppdppv_newmethod_2023.07.24.r'.
 
 
-//Step 2 as per an older method which was used until 2025//
+# //Step 2 as per an older method which was used until 2025//
 # Step 2:	Treatment effect estimation
 
 a) ACR (i.e. albuminuria) analysis - folder analysis_acr
