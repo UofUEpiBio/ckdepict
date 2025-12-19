@@ -67,7 +67,7 @@ Sequentially run codes displayed under sasprograms subfolder under these analysi
 Please save the SAS logs under exports for each program that you run so that we can go back and check them if we face issues during the meta-analysis.
 
 # Step 3: Merging summary data from each study in your database
-1. Using your own code, merge 'nt99a' file from each study (found in the exports subfolder under analysis_sets\all or acr6 or acr12 etc.)
+1. Using your own code, merge 't99_xxxx' file from each study. For example, for analysis_sets\all the file will be named 't99_all' in the exports folder. For your intended analysis set (acr6, quad, etc.), you can pool t99_xxxx files of that set within each study.
 2. This is the pooled trial-level input file for the next steps.
 
 # Step 4: Trial-level analysis - Bayesian meta-regression
