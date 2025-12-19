@@ -1,5 +1,6 @@
 # **Statistical programs for conducting trial-level meta-analyses for validating surrogate endpoints in chronic kidney disease**
 (by the Chronic Kidney Disease - Epidemiology Collboration)
+<img width="1400" height="186" alt="CKDEPI-v3-medium" src="https://github.com/user-attachments/assets/ab915bd9-e88e-4fb4-adb1-3190c2a835ab" />
 
 # **Overview**
 
@@ -22,7 +23,6 @@ This approach takes advantage of the fact that the average causal effects on the
 
 
 **Below are the detailed steps for analyses that correspond with the programs in this GitHub.**
-(Note: The  numbers below do not follow the bullet numbers in the seven steps in the overview.)
 
 # Step 1: Data cleaning/management   
 ## A) Basic data management
