@@ -1,5 +1,5 @@
-# **Chronic Kidney Disease - Epidemiology Collaboration (Clinical Trials)**
-# **Statistical programs for estimating treatment effect on kidney disease outcomes in clinical trials and conducting a trial-level meta-analysis for validating surrogate endpoints**
+# **Statistical programs for conducting trial-level meta-analyses for validating surrogate endpoints in chronic kidney disease**
+(by the Chronic Kidney Disease - Epidemiology Collboration)
 
 # **Overview**
 
