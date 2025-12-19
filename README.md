@@ -1,4 +1,7 @@
-**Overview**
+# **Chronic Kidney Disease - Epidemiology Collaboration (Clinical Trials)**
+# **Statistical programs for estimating treatment effect on kidney disease outcomes in clinical trials and conducting a trial-level meta-analysis for validating surrogate endpoints**
+
+# **Overview**
 
 Kidney disease is a worldwide  public health problem, disproportionately affecting older people and lower and middle income countries, with major outcomes including kidney failure and cardiovascular disease. The CKD Epidemiology Collaboration (CKD-EPI) is a research group founded in 2003 and has interests in evaluation of surrogate endpoints for clinical trials in CKD (CKD-EPI CT) along with estimation and measurement of glomerular filtration rate (GFR). 
 
@@ -22,7 +25,7 @@ This approach takes advantage of the fact that the average causal effects on the
 (Note: The  numbers below do not follow the bullet numbers in the seven steps in the overview.)
 
 # Step 1: Data cleaning/management   
-# A) Basic data management
+## A) Basic data management
 [Steps to be done using researchers' own SAS/R/other codes]
 a. The goal of this step is to create preliminary datasets to match the template provided in the Excel sheet “Datasets template”. Since each study is different we are unable to provide programs for getting to these preliminary datasets. Please use your own way of coding for deriving them. 
 The three datasets you should have at the end of this step are: Baseline,	Scr,	UP
@@ -35,7 +38,7 @@ c. Rename your variables with the exact names in the template, including caps. T
 d.	Please fill out the relevant cells in the tab “At a glance” to document your variable selection process and as a means of communicating with the data coordinating center (TuftsMC) about doubts or limitations.
 e.	Save the datasets in the folder “2 Clean data”.
 
-# B) Creating derived variables
+## B) Creating derived variables
 [Steps using code in the folder 1_data_cleaning]
 a.	Once you have the above 3 datasets, the rest of the data management can be done using the SAS program “Steps code”. 
 b.	To run this code, assign the file path of the Root directory to path1.
@@ -44,7 +47,7 @@ d.	Press control + H to replace “newstudy” with a 6 character name for your 
 e.	You should see these additional datasets generated in the “2 Clean data” folder.
 newstudy_baseline,	newstudy_egfr,	newstudy_upro, fdac2_baseline,	fdac2_studygfr,	fdac2_studygfrup, fdac2_tx_allendpts,	fdac2_tx_slctendpts,	fdac2_visits, fdac2_visits_interim,	upro_change9m,	upro_change9m (Excel)
 
-# C) Data checks   
+## C) Data checks   
 a.	Step 1b outputs a summary of variables. Please check the values generated against the published results of your study to ensure at least the published variables are coded correctly.
 b.	This is also an opportunity to check other variables and rerun analysis as needed. Negative values for variables indicating number of days, very high or very low values for lab parameters are some red flags to be aware of.
 c.	Another check performed by step 2 is if there are sufficient values for conducting change in albuminuria analysis. Please work with TuftsMC data manager to decide if the study is eligible for albuminuria analysis.
@@ -84,7 +87,7 @@ Set up and run the R function 'ppdppv_newmethod_2023.07.24.r'.
 
 
 # //Step 2 as per an older method which was used until 2025//
-# Step 2:	Treatment effect estimation
+## Step 2:	Treatment effect estimation
 
 a) ACR (i.e. albuminuria) analysis - folder analysis_acr
 1.	Sequentially run codes under path1\analysis_acr\sasprograms.
