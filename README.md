@@ -1,5 +1,4 @@
 # **Statistical programs for conducting trial-level meta-analyses for validating surrogate endpoints in chronic kidney disease**
-(by the Chronic Kidney Disease - Epidemiology Collboration)
 <img width="1400" height="186" alt="CKDEPI-v3-medium" src="https://github.com/user-attachments/assets/ab915bd9-e88e-4fb4-adb1-3190c2a835ab" />
 
 # **Overview**
