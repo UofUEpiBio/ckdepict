@@ -1,0 +1,8 @@
+{
+  "bundle": "t003_zupro_measure",
+  "source_file": "macros/zupro.sas",
+  "source_blob_sha": "808a6550618e4a467f521820f254986533036ab3",
+  "source_commit": "1a6295759ddf2734ceda66b3a87c7a6ba6e79160",
+  "tier": "real_data",
+  "notes": "UP_MeasureToUse compress() conversion ladder (PER/AER/PCR/ACR/SPCR/SACR) deriving zupro/zacr on 6 mock baseline rows; PROC PRINT."
+}

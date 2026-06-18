@@ -1,0 +1,27 @@
+Jenner 0.1.0 (Unlicensed - limited to 100 observations)
+Get a license at https://jenneranalytics.com/license
+
+NOTE: Option OBS changed to 100.
+NOTE: DATA study_codes
+
+NOTE: Processing inline DATALINES (10 lines)
+
+NOTE: Read 10 rows from DATALINES.
+NOTE: Wrote study_codes (10 rows, 3 columns).
+NOTE: DATA elapsed:
+  wall  0.00 seconds
+  cpu   0.00 seconds
+NOTE: DATA study_labelled
+
+
+NOTE: Read 10 rows from study_codes.
+NOTE: Wrote study_labelled (10 rows, 5 columns).
+NOTE: DATA elapsed:
+  wall  0.00 seconds
+  cpu   0.00 seconds
+NOTE: PROC PRINT data=study_labelled
+
+NOTE: PROC PRINT completed: 10 observations printed, 5 variables
+NOTE: PROC FREQ
+NOTE: ODS plot written: freq_disease_fmt.spec.json
+NOTE: PROC FREQ statement used.

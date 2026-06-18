@@ -1,0 +1,21 @@
+{
+  "_captured_at": "2026-06-18T15:17:28.207089Z",
+  "_captured_run_id": "r_019edb4efbed7982abc16a9295a7a651",
+  "status": "ok",
+  "exit_code": 0,
+  "log_contains": [
+    "NOTE: Read 10 rows from DATALINES.",
+    "NOTE: Wrote trial_arms (10 rows, 2 columns).",
+    "NOTE: Read 10 rows from trial_arms.",
+    "NOTE: Wrote trial_labelled (10 rows, 4 columns).",
+    "NOTE: PROC PRINT data=trial_labelled"
+  ],
+  "log_does_not_contain": [
+    "ERROR:",
+    "[JENNER-ERROR"
+  ],
+  "diagnostics": {
+    "parse_warnings": [],
+    "runtime_warnings": []
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "bundle": "t004_study_year",
+  "source_file": "macros/study_year.sas",
+  "source_blob_sha": "cce05222960677efacd9e2a00e9c9fe153acf3ac",
+  "source_commit": "1a6295759ddf2734ceda66b3a87c7a6ba6e79160",
+  "tier": "real_data",
+  "notes": "study_num->study_year publication-year lookup (subset of mapping) on 12 mock studies; PROC PRINT + PROC MEANS."
+}
