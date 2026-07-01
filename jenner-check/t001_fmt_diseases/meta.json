@@ -1,0 +1,8 @@
+{
+  "bundle": "t001_fmt_diseases",
+  "source_file": "macros/diseases.sas",
+  "source_blob_sha": "1a650d4f09a2349752458e9fd170bc5dffb97848",
+  "source_commit": "1a6295759ddf2734ceda66b3a87c7a6ba6e79160",
+  "tier": "real_data",
+  "notes": "disease/disease2 if-then format ladders applied to 10 mock CKD study rows; PROC PRINT + PROC FREQ."
+}

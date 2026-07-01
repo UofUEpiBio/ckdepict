@@ -1,0 +1,21 @@
+{
+  "_captured_at": "2026-06-18T15:17:40.044056Z",
+  "_captured_run_id": "r_019edb4f2b5a70d3adff6fa11c96379b",
+  "status": "ok",
+  "exit_code": 0,
+  "log_contains": [
+    "NOTE: Read 7 rows from DATALINES.",
+    "NOTE: Wrote trials_all (7 rows, 3 columns).",
+    "NOTE: Read 7 rows from trials_all.",
+    "NOTE: Wrote trials_asia (2 rows, 3 columns).",
+    "NOTE: Wrote counts (2 rows, 2 columns)."
+  ],
+  "log_does_not_contain": [
+    "ERROR:",
+    "[JENNER-ERROR"
+  ],
+  "diagnostics": {
+    "parse_warnings": [],
+    "runtime_warnings": []
+  }
+}

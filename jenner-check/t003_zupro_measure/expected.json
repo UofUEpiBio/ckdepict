@@ -1,0 +1,21 @@
+{
+  "_captured_at": "2026-06-18T15:17:29.600651Z",
+  "_captured_run_id": "r_019edb4f01e378b08ea83ce1b8d0b3a2",
+  "status": "ok",
+  "exit_code": 0,
+  "log_contains": [
+    "NOTE: Read 6 rows from DATALINES.",
+    "NOTE: Wrote baseline (6 rows, 7 columns).",
+    "NOTE: Read 6 rows from baseline.",
+    "NOTE: Wrote zderived (6 rows, 9 columns).",
+    "NOTE: PROC PRINT data=zderived"
+  ],
+  "log_does_not_contain": [
+    "ERROR:",
+    "[JENNER-ERROR"
+  ],
+  "diagnostics": {
+    "parse_warnings": [],
+    "runtime_warnings": []
+  }
+}

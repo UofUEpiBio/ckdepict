@@ -1,0 +1,21 @@
+{
+  "_captured_at": "2026-06-18T15:17:31.865472Z",
+  "_captured_run_id": "r_019edb4f0a5879529e4f591b3a6b30a6",
+  "status": "ok",
+  "exit_code": 0,
+  "log_contains": [
+    "NOTE: Read 12 rows from DATALINES.",
+    "NOTE: Wrote studies (12 rows, 1 columns).",
+    "NOTE: Read 12 rows from studies.",
+    "NOTE: Wrote study_pub (12 rows, 2 columns).",
+    "NOTE: PROC PRINT data=study_pub"
+  ],
+  "log_does_not_contain": [
+    "ERROR:",
+    "[JENNER-ERROR"
+  ],
+  "diagnostics": {
+    "parse_warnings": [],
+    "runtime_warnings": []
+  }
+}

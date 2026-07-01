@@ -1,0 +1,8 @@
+{
+  "bundle": "t005_fmt_region_pooled",
+  "source_file": "macros/regions.sas + macros/pooled.sas",
+  "source_blob_sha": "regions:6ca7b00301b5113a194609c77336f7694dc256ea pooled:504b575a84c8a530921290e965f37c5e7b24a6bf",
+  "source_commit": "1a6295759ddf2734ceda66b3a87c7a6ba6e79160",
+  "tier": "real_data",
+  "notes": "region and pooled if-then ladders on 10 mock studies; PROC PRINT + region*pooled PROC FREQ crosstab."
+}

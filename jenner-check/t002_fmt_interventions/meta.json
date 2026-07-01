@@ -1,0 +1,8 @@
+{
+  "bundle": "t002_fmt_interventions",
+  "source_file": "macros/interventions.sas",
+  "source_blob_sha": "dc754be0d61de469dd1c2666e35a1f01eecbc577",
+  "source_commit": "1a6295759ddf2734ceda66b3a87c7a6ba6e79160",
+  "tier": "real_data",
+  "notes": "intervention_fmt/intervention_abrev if-then ladders applied to 10 mock trial arms; PROC PRINT."
+}

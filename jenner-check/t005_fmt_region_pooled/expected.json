@@ -1,0 +1,21 @@
+{
+  "_captured_at": "2026-06-18T15:17:38.589490Z",
+  "_captured_run_id": "r_019edb4f0fe4712281fd553a234e62c7",
+  "status": "ok",
+  "exit_code": 0,
+  "log_contains": [
+    "NOTE: Read 10 rows from DATALINES.",
+    "NOTE: Wrote study_attr (10 rows, 3 columns).",
+    "NOTE: Read 10 rows from study_attr.",
+    "NOTE: Wrote study_attr_lbl (10 rows, 5 columns).",
+    "NOTE: PROC PRINT data=study_attr_lbl"
+  ],
+  "log_does_not_contain": [
+    "ERROR:",
+    "[JENNER-ERROR"
+  ],
+  "diagnostics": {
+    "parse_warnings": [],
+    "runtime_warnings": []
+  }
+}

@@ -1,0 +1,28 @@
+
+study_id  disease     disease_fmt  disease2    disease2_fmt
+--------  -------  --------------  --------  --------------
+     101        1  CKD-CNS                1  CKD
+     102        2  CKD-HTN                1  CKD
+     103        3  CKD-DN                 2  Diabetes
+     104        4  IgAN                   3  Glomerular
+     105        5  Lupus                  3  Glomerular
+     106        8  Diabetes               2  Diabetes
+     107        9  Heart failure          5  Heart failure
+     108       10  High CV risk           4  Cardiovascular
+     109       11  FSGS                   3  Glomerular
+     110       13  Diabetes - CKD         2  Diabetes
+
+                                                   The FREQ Procedure
+
+disease_fmt       Frequency    Percent
+---------------------------------------
+CKD-CNS                   1     10.00
+CKD-DN                    1     10.00
+CKD-HTN                   1     10.00
+Diabetes                  1     10.00
+Diabetes - CKD            1     10.00
+FSGS                      1     10.00
+Heart failure             1     10.00
+High CV risk              1     10.00
+IgAN                      1     10.00
+Lupus                     1     10.00

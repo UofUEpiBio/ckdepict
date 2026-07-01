@@ -1,0 +1,14 @@
+
+trial_id  intervention  intervention_abrev               intervention_fmt
+--------  ------------  ------------------  -----------------------------
+       1             1  RAS                 RASB vs CONTROL
+       2             2  RvC                 RASB v CCB
+       3             5  IS                  Immunosuppression
+       4             6  ALLO                Allopurinol
+       5             9  GLUC                Intensive Glucose
+       6            14  SGLT2I              SGLT-2 Inhibitor
+       7            20  GLP1A               GLP-1 Agonist
+       8            21  MRA                 Mineralocort. rec. antagonist
+       9            26  ARNI                Angiotensin rec/neprilysin in
+      10            27  CMyAct              Cardiac Myosin Activatation
+
